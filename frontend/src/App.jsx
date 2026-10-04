@@ -107,6 +107,7 @@ export default function App() {
   const [selectedSchemeForDetails, setSelectedSchemeForDetails] = useState(null);
   const [initialChatQuery, setInitialChatQuery] = useState('');
   const [toast, setToast] = useState(null);
+  const [activeAppId, setActiveAppId] = useState(null);
 
   const showToast = (message) => {
     setToast(message);
@@ -127,7 +128,9 @@ export default function App() {
   const handleLogout = () => {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('user');
+    sessionStorage.clear();
     setUser(null);
+    setActiveAppId(null);
     setActiveTab('chat');
   };
 
@@ -233,7 +236,7 @@ export default function App() {
       <main className="flex-1 pb-10">
         {activeTab === 'chat' && <ChatComponent t={t} lang={lang} user={user} initialQuery={initialChatQuery} onClearInitialQuery={() => setInitialChatQuery('')} />}
         {activeTab === 'schemes' && <SchemesComponent t={t} lang={lang} onOpenDetails={handleOpenDetails} />}
-        {activeTab === 'tracker' && <TrackerComponent t={t} lang={lang} user={user} />}
+        {activeTab === 'tracker' && <TrackerComponent t={t} lang={lang} user={user} activeAppId={activeAppId} onClearActiveAppId={() => setActiveAppId(null)} />}
         {activeTab === 'admin' && user && user.role === 'admin' && <AdminComponent t={t} lang={lang} />}
       </main>
 
@@ -252,6 +255,7 @@ export default function App() {
         lang={lang}
         t={t}
         onSubmitted={(newRefId) => {
+          setActiveAppId(newRefId);
           setActiveTab('tracker');
           showToast(lang === 'ta'
             ? `✅ மாதிரி விண்ணப்பம் சமர்ப்பிக்கப்பட்டது — எண்: ${newRefId}`
@@ -619,9 +623,12 @@ function formatDuration(ms) {
   return '< 1 min';
 }
 
-function TrackerComponent({ t, lang, user }) {
-  const [searchId, setSearchId] = useState('DEMO-APP-1001');
+function TrackerComponent({ t, lang, user, activeAppId, onClearActiveAppId }) {
+  const [searchId, setSearchId] = useState('');
   const [app, setApp] = useState(null);
+  const [userApps, setUserApps] = useState([]);
+  const [loadingApps, setLoadingApps] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   const [showAboutDemo, setShowAboutDemo] = useState(false);
   const [expandedStages, setExpandedStages] = useState({});
   const [trackingLoading, setTrackingLoading] = useState(false);
@@ -630,25 +637,102 @@ function TrackerComponent({ t, lang, user }) {
     setExpandedStages(prev => ({ ...prev, [stageKey]: !prev[stageKey] }));
   };
 
-  const track = async (id = searchId) => {
-    if (!id || !id.trim()) return;
+  const track = async (idToTrack) => {
+    const cleanId = (idToTrack || searchId || '').trim();
+    if (!cleanId) return;
     setTrackingLoading(true);
+    setErrorMessage('');
     try {
       const token = localStorage.getItem('accessToken');
-      const res = await fetch(`${API_URL}/api/applications/${id.trim()}`, {
+      if (!token) {
+        setApp(null);
+        setErrorMessage(lang === 'ta'
+          ? 'விண்ணப்பத்தைக் கண்காணிக்க தயவுசெய்து உள்நுழையவும்.'
+          : 'Please log in to track your application.');
+        return;
+      }
+      const res = await fetch(`${API_URL}/api/applications/${encodeURIComponent(cleanId)}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
+      const data = await res.json();
       if (res.ok) {
-        setApp(await res.json());
+        setApp(data);
+        setSearchId(data.demo_reference_id);
+        setErrorMessage('');
+      } else {
+        setApp(null);
+        if (res.status === 403) {
+          setErrorMessage(lang === 'ta'
+            ? 'அனுமதி மறுக்கப்பட்டது: இந்த விண்ணப்பத்தை நீங்கள் பார்க்க அனுமதி இல்லை (மற்றொரு பயனரின் விண்ணப்பம்).'
+            : 'Access denied: You do not have permission to view this application.');
+        } else if (res.status === 404) {
+          setErrorMessage(lang === 'ta'
+            ? `விண்ணப்பம் '${cleanId}' கண்டறியப்படவில்லை.`
+            : `Application '${cleanId}' was not found.`);
+        } else {
+          setErrorMessage(data.error || 'Failed to fetch application details.');
+        }
       }
     } catch (e) {
-      console.warn('Track application error:', e);
+      setApp(null);
+      setErrorMessage(lang === 'ta' ? 'விண்ணப்பத் தகவல்களைப் பெறுவதில் பிழை ஏற்பட்டது.' : 'Network error fetching application status.');
     } finally {
       setTrackingLoading(false);
     }
   };
 
-  useEffect(() => { track('DEMO-APP-1001'); }, []);
+  // Re-fetch user applications fresh on every login, user change, or activeAppId change
+  useEffect(() => {
+    if (!user) {
+      setUserApps([]);
+      setApp(null);
+      setSearchId('');
+      setErrorMessage('');
+      return;
+    }
+
+    const token = localStorage.getItem('accessToken');
+    if (!token) {
+      setUserApps([]);
+      setApp(null);
+      return;
+    }
+
+    setLoadingApps(true);
+    setErrorMessage('');
+    fetch(`${API_URL}/api/applications`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+      .then(res => {
+        if (!res.ok) throw new Error('Failed to load applications');
+        return res.json();
+      })
+      .then(apps => {
+        const list = Array.isArray(apps) ? apps : [];
+        setUserApps(list);
+
+        // Track target: activeAppId if specified, or first application in list
+        const target = (activeAppId && list.find(a => a.demo_reference_id === activeAppId))
+          || (list.length > 0 ? list[0] : null);
+
+        if (target) {
+          setSearchId(target.demo_reference_id);
+          track(target.demo_reference_id);
+        } else if (activeAppId) {
+          setSearchId(activeAppId);
+          track(activeAppId);
+        } else {
+          setApp(null);
+          setSearchId('');
+        }
+      })
+      .catch(err => {
+        console.warn('Error loading user applications:', err);
+        setUserApps([]);
+        setApp(null);
+      })
+      .finally(() => setLoadingApps(false));
+  }, [user?.id, activeAppId]);
 
   const history = app ? (typeof app.status_history === 'string' ? JSON.parse(app.status_history) : app.status_history) : [];
 
@@ -680,6 +764,22 @@ function TrackerComponent({ t, lang, user }) {
 
   return (
     <div className="max-w-4xl mx-auto p-4 space-y-6">
+      {!user && (
+        <div className="p-4 bg-amber-950/40 border border-amber-800/80 rounded-2xl text-amber-200 text-xs flex items-center gap-3">
+          <AlertCircle size={18} className="text-amber-400 shrink-0" />
+          <div>
+            <span className="font-semibold block mb-0.5">
+              {lang === 'ta' ? 'உள்நுழைவு தேவை' : 'Authentication Required'}
+            </span>
+            <span>
+              {lang === 'ta'
+                ? 'உங்கள் விண்ணப்பங்களைக் கண்காணிக்க தயவுசெய்து உள்நுழையவும். விண்ணப்ப விவரங்கள் உங்கள் கணக்கிற்கு மட்டுமே தனிப்பட்டவை.'
+                : 'Please log in to view and track your applications. Applications are strictly private and isolated to your account.'}
+            </span>
+          </div>
+        </div>
+      )}
+
       <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
@@ -714,18 +814,51 @@ function TrackerComponent({ t, lang, user }) {
           </div>
         )}
 
+        {/* User's own applications list / pills */}
+        {user && userApps.length > 0 && (
+          <div className="space-y-1.5 pt-1 border-t border-slate-800/80">
+            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+              <span>{lang === 'ta' ? 'எனது விண்ணப்பங்கள்' : 'My Applications'} ({userApps.length}):</span>
+              {loadingApps && <span className="text-[10px] text-slate-500">Updating...</span>}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {userApps.map(a => (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => { setSearchId(a.demo_reference_id); track(a.demo_reference_id); }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-mono transition-all border flex items-center gap-2 ${
+                    app?.demo_reference_id === a.demo_reference_id
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500 font-bold shadow-sm shadow-emerald-950'
+                      : 'bg-slate-900/90 text-slate-400 border-slate-800 hover:text-white hover:border-slate-700'
+                  }`}
+                >
+                  <span>{a.demo_reference_id}</span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-sans uppercase font-bold ${
+                    a.status === 'Disbursed' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' :
+                    a.status === 'Rejected' ? 'bg-rose-950 text-rose-400 border border-rose-800' :
+                    'bg-amber-950/80 text-amber-300 border border-amber-800/80'
+                  }`}>
+                    {a.status}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="flex gap-2">
           <input
             type="text"
             value={searchId}
             onChange={(e) => setSearchId(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') track(); }}
-            placeholder="Enter application reference ID (e.g. DEMO-APP-1001)..."
+            placeholder={lang === 'ta' ? 'விண்ணப்ப குறிப்பு எண்ணை உள்ளிடவும் (எ.கா. DEMO-APP-...)...' : 'Enter application reference ID (e.g. DEMO-APP-...)...'}
             className="flex-1 bg-slate-900 border border-slate-700 text-white font-mono text-sm px-4 py-2.5 rounded-xl focus:border-emerald-500 focus:outline-none transition-colors"
           />
           <button
             onClick={() => track()}
-            disabled={trackingLoading}
+            disabled={trackingLoading || !searchId.trim()}
             className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-semibold rounded-xl transition-colors flex items-center gap-1.5"
           >
             {trackingLoading && <Loader2 size={14} className="animate-spin" />}
@@ -733,6 +866,29 @@ function TrackerComponent({ t, lang, user }) {
           </button>
         </div>
       </div>
+
+      {/* Error banner for unauthorized or not found queries */}
+      {errorMessage && (
+        <div className="p-4 bg-rose-950/40 border border-rose-800/80 rounded-2xl text-rose-200 text-xs flex items-center gap-3">
+          <AlertTriangle size={18} className="text-rose-400 shrink-0" />
+          <span className="font-medium">{errorMessage}</span>
+        </div>
+      )}
+
+      {/* Empty state when user is logged in but has no applications yet */}
+      {user && userApps.length === 0 && !app && !trackingLoading && !errorMessage && !loadingApps && (
+        <div className="glass-panel p-8 rounded-2xl border border-slate-800 text-center space-y-3">
+          <FileText size={36} className="text-slate-600 mx-auto" />
+          <div className="text-sm font-semibold text-slate-300">
+            {lang === 'ta' ? 'விண்ணப்பங்கள் எதுவும் சமர்ப்பிக்கப்படவில்லை' : 'No Applications Submitted Yet'}
+          </div>
+          <p className="text-xs text-slate-500 max-w-sm mx-auto">
+            {lang === 'ta'
+              ? 'திட்டங்கள் பிரிவில் சென்று தகுதியைச் சரிபார்த்து "Start Demo Application" மூலம் உங்கள் விண்ணப்பத்தைச் சமர்ப்பிக்கவும்.'
+              : 'Browse schemes in the Scheme Browser, verify eligibility, and click "Start Demo Application" to submit your application.'}
+          </p>
+        </div>
+      )}
 
       {app && (
         <div className="glass-panel p-6 sm:p-8 rounded-2xl border border-slate-800 space-y-6">

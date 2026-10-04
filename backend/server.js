@@ -261,6 +261,28 @@ async function initDb() {
       `, [uRes.rows[0].id, sRes.rows[0].id, JSON.stringify(initialHistory)]);
     }
   }
+
+  // Ensure both seeded test users (Madhu Nisha & Karthikeswari) have distinct applications
+  try {
+    const karthiUser = await pool.query(`SELECT id FROM users WHERE LOWER(TRIM(name)) = 'karthikeswari' LIMIT 1`);
+    const sRes2 = await pool.query(`SELECT id FROM schemes ORDER BY id DESC LIMIT 1`);
+    if (karthiUser.rows.length > 0 && sRes2.rows.length > 0) {
+      const kAppCheck = await pool.query(`SELECT id FROM applications WHERE user_id = $1`, [karthiUser.rows[0].id]);
+      if (kAppCheck.rows.length === 0) {
+        const karthiHistory = [
+          { stage: 'Applied', timestamp: new Date(Date.now() - 120 * 60 * 1000).toISOString(), remarks: 'Submitted application on e-Sevai portal.' },
+          { stage: 'Document Verification', timestamp: new Date().toISOString(), remarks: 'College certificates and ration card verified.' }
+        ];
+        await pool.query(`
+          INSERT INTO applications (user_id, scheme_id, demo_reference_id, status, status_history)
+          VALUES ($1, $2, 'DEMO-APP-2001', 'Document Verification', $3)
+          ON CONFLICT (demo_reference_id) DO NOTHING
+        `, [karthiUser.rows[0].id, sRes2.rows[0].id, JSON.stringify(karthiHistory)]);
+      }
+    }
+  } catch (e) {
+    console.warn('[Seed Application Sync Error]', e.message);
+  }
 }
 
 // ============================================================================
@@ -529,16 +551,23 @@ async function toolGetApplicationProcess({ scheme_id }) {
   };
 }
 
-async function toolGetApplicationStatus({ application_id }) {
+async function toolGetApplicationStatus({ application_id, user_id, user_role }) {
   const qStr = String(application_id).trim();
+  const isNumeric = !isNaN(Number(qStr)) && Number(qStr) > 0;
   const aRes = await pool.query(`
     SELECT a.*, s.name_en, s.name_ta, u.name as user_name
     FROM applications a JOIN schemes s ON a.scheme_id = s.id JOIN users u ON a.user_id = u.id
     WHERE a.id = $1 OR a.demo_reference_id = $2
-  `, [isNaN(Number(qStr)) ? -1 : Number(qStr), qStr]);
+  `, [isNumeric ? Number(qStr) : -1, qStr]);
 
   if (aRes.rows.length === 0) return { error: `Application '${application_id}' not found.` };
   const app = aRes.rows[0];
+
+  // User isolation check for conversational agent
+  if (user_role !== 'admin' && user_id && app.user_id !== user_id) {
+    return { error: `Access denied. Application '${application_id}' belongs to another user.` };
+  }
+
   const history = typeof app.status_history === 'string' ? JSON.parse(app.status_history) : app.status_history;
 
   return {
@@ -909,7 +938,7 @@ function extractCitizenAttributes(text) {
 }
 
 // Orchestrator Agent Function Calling Loop: Requirements-First by Default
-async function runOrchestrator({ message, language = 'en', user_id, history = [] }) {
+async function runOrchestrator({ message, language = 'en', user_id, user_role, history = [] }) {
   const trace = [];
   const lowerMsg = message.toLowerCase();
   const isTa = language === 'ta' || lowerMsg.includes('தமிழ்') || /[\u0B80-\u0BFF]/.test(message);
@@ -919,7 +948,7 @@ async function runOrchestrator({ message, language = 'en', user_id, history = []
   const appIdMatch = message.match(/(?:DEMO-APP-|APP-)?(\d{4,})/i) || message.match(/DEMO-APP-\d+/i);
   if (appIdMatch && (lowerMsg.includes('status') || lowerMsg.includes('track') || lowerMsg.includes('நிலை') || lowerMsg.includes('விண்ணப்ப'))) {
     const targetId = appIdMatch[0].startsWith('DEMO-APP-') ? appIdMatch[0] : (appIdMatch[0].startsWith('APP-') ? appIdMatch[0] : `DEMO-APP-${appIdMatch[1]}`);
-    appStatusResult = await toolGetApplicationStatus({ application_id: targetId });
+    appStatusResult = await toolGetApplicationStatus({ application_id: targetId, user_id, user_role });
     trace.push({ tool: 'get_application_status', input: { application_id: targetId }, output: appStatusResult });
   }
 
@@ -1308,7 +1337,8 @@ app.post('/api/chat', optionalAuthMiddleware, async (req, res) => {
   try {
     const { message, language, history } = req.body;
     const userId = req.user ? req.user.id : null;
-    const result = await runOrchestrator({ message, language, user_id: userId, history });
+    const userRole = req.user ? req.user.role : null;
+    const result = await runOrchestrator({ message, language, user_id: userId, user_role: userRole, history });
     res.json(result);
   } catch (e) {
     console.error("[Chat API Processing Error]", e);
@@ -1383,13 +1413,25 @@ app.get('/api/applications', authMiddleware, async (req, res) => {
 app.get('/api/applications/:id', authMiddleware, async (req, res) => {
   try {
     const qStr = req.params.id;
+    const isNumeric = !isNaN(Number(qStr)) && Number(qStr) > 0;
     const aRes = await pool.query(`
       SELECT a.*, s.name_en as scheme_name_en, s.name_ta as scheme_name_ta, u.name as applicant_name
       FROM applications a JOIN schemes s ON a.scheme_id = s.id JOIN users u ON a.user_id = u.id
       WHERE a.id = $1 OR a.demo_reference_id = $2
-    `, [isNaN(Number(qStr)) ? -1 : Number(qStr), qStr]);
-    if (aRes.rows.length === 0) return res.status(404).json({ error: "Not found" });
-    res.json(aRes.rows[0]);
+    `, [isNumeric ? Number(qStr) : -1, qStr]);
+
+    if (aRes.rows.length === 0) return res.status(404).json({ error: "Application not found" });
+    const appRec = aRes.rows[0];
+
+    // ROOT CAUSE FIX: Strict user data isolation check
+    // Non-admin users are strictly forbidden from viewing another user's application
+    if (req.user.role !== 'admin' && appRec.user_id !== req.user.id) {
+      return res.status(403).json({
+        error: "Access denied: You do not have permission to view this application."
+      });
+    }
+
+    res.json(appRec);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
