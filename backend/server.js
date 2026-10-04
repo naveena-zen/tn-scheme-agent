@@ -128,6 +128,7 @@ async function initDb() {
   `);
 
   await pool.query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS scheme_id INT REFERENCES schemes(id) ON DELETE SET NULL;`).catch(() => {});
+  await pool.query(`ALTER TABLE schemes ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;`).catch(() => {});
 
   const userCheck = await pool.query(`SELECT count(*) FROM users`);
   if (parseInt(userCheck.rows[0].count) === 0) {
@@ -251,7 +252,7 @@ async function initDb() {
     const sRes = await pool.query(`SELECT id FROM schemes LIMIT 1`);
     if (uRes.rows.length > 0 && sRes.rows.length > 0) {
       const initialHistory = [
-        { stage: 'Applied', timestamp: new Date().toISOString(), remarks: 'Application submitted successfully on portal.' },
+        { stage: 'Applied', timestamp: new Date(Date.now() - 85 * 60 * 1000).toISOString(), remarks: 'Application submitted successfully on portal.' },
         { stage: 'Document Verification', timestamp: new Date().toISOString(), remarks: 'Ration card and Aadhaar verified by Revenue Inspector.' }
       ];
       await pool.query(`
@@ -567,8 +568,8 @@ async function evaluateNotificationTargets(schemeData, context = { type: 'scrape
     if (schemeData.id) {
       try {
         const notifQ = ctx.user_id
-          ? `SELECT * FROM notifications WHERE scheme_id = $1 AND (user_id = $2 OR user_id IS NULL) ORDER BY created_at DESC LIMIT 1`
-          : `SELECT * FROM notifications WHERE scheme_id = $1 ORDER BY created_at DESC LIMIT 1`;
+          ? `SELECT * FROM notifications WHERE scheme_id = $1 AND (type = 'new_scheme' OR type = 'status_change') AND (user_id = $2 OR user_id IS NULL) ORDER BY created_at DESC LIMIT 1`
+          : `SELECT * FROM notifications WHERE scheme_id = $1 AND (type = 'new_scheme' OR type = 'status_change') ORDER BY created_at DESC LIMIT 1`;
         const notifParams = ctx.user_id ? [schemeData.id, ctx.user_id] : [schemeData.id];
         const nRes = await pool.query(notifQ, notifParams);
         if (nRes.rows.length > 0) {
@@ -579,18 +580,21 @@ async function evaluateNotificationTargets(schemeData, context = { type: 'scrape
       }
     }
 
-    // b) Check other schemes in the same category recently added or updated
+    // b) Check other schemes in the same category recently added or updated (e.g. last 30 days)
     let relatedCategorySchemes = [];
     if (schemeData.category) {
       try {
         const catRes = await pool.query(`
-          SELECT id, name_en, name_ta, category, department, last_verified_at, status
+          SELECT id, name_en, name_ta, category, department, last_verified_at, created_at, status
           FROM schemes
           WHERE category = $1
             AND id != $2
             AND status = 'live'
-            AND (last_verified_at >= NOW() - INTERVAL '30 days' OR last_verified_at IS NOT NULL)
-          ORDER BY last_verified_at DESC
+            AND (
+              last_verified_at >= NOW() - INTERVAL '30 days'
+              OR (created_at IS NOT NULL AND created_at >= NOW() - INTERVAL '30 days')
+            )
+          ORDER BY COALESCE(last_verified_at, created_at) DESC
           LIMIT 2
         `, [schemeData.category, schemeData.id || 0]);
         relatedCategorySchemes = catRes.rows;
@@ -599,21 +603,9 @@ async function evaluateNotificationTargets(schemeData, context = { type: 'scrape
       }
     }
 
-    let updateText = '';
-    if (relevantNotification) {
-      updateText = isTa
-        ? `📌 **தொடர்புடைய புதுப்பிப்பு:** ${relevantNotification.message_ta}`
-        : `📌 **Related update:** ${relevantNotification.message_en}`;
-      relevantUpdates.push({ type: 'existing_notification', text: updateText });
-    } else if (relatedCategorySchemes.length > 0) {
-      const rel = relatedCategorySchemes[0];
-      updateText = isTa
-        ? `📌 **தொடர்புடைய புதுப்பிப்பு:** இப்பிரிவில் அண்மையில் சரிபார்க்கப்பட்ட மற்றொரு திட்டம் — **${rel.name_ta}** (${rel.department}).`
-        : `📌 **Related update:** A recently verified scheme in this category is also active — **${rel.name_en}** (${rel.department}).`;
-      relevantUpdates.push({ type: 'related_scheme', scheme: rel, text: updateText });
-
-      // Populate main notifications panel for this scheme-driven match if user is authenticated
-      if (ctx.user_id) {
+    // Populate main notifications panel for related schemes when user is authenticated
+    if (ctx.user_id && relatedCategorySchemes.length > 0) {
+      for (const rel of relatedCategorySchemes) {
         try {
           const checkExist = await pool.query(
             `SELECT 1 FROM notifications WHERE user_id = $1 AND scheme_id = $2 AND type = 'new_scheme'`,
@@ -634,6 +626,27 @@ async function evaluateNotificationTargets(schemeData, context = { type: 'scrape
           console.warn('[Notification Agent] Error populating panel notification:', e.message);
         }
       }
+    }
+
+    let updateText = '';
+    if (relevantNotification && relatedCategorySchemes.length > 0) {
+      const rel = relatedCategorySchemes[0];
+      updateText = isTa
+        ? `📌 **தொடர்புடைய புதுப்பிப்புகள்:**\n- ${relevantNotification.message_ta}\n- இப்பிரிவில் (${rel.category}) அண்மையில் புதுப்பிக்கப்பட்ட திட்டம்: **${rel.name_ta}** (${rel.department}).`
+        : `📌 **Related updates:**\n- ${relevantNotification.message_en}\n- Another scheme in this category was recently added/updated: **${rel.name_en}** (${rel.department}).`;
+      relevantUpdates.push({ type: 'existing_notification', text: relevantNotification.message_en });
+      relevantUpdates.push({ type: 'related_scheme', scheme: rel, text: rel.name_en });
+    } else if (relevantNotification) {
+      updateText = isTa
+        ? `📌 **தொடர்புடைய புதுப்பிப்பு:** ${relevantNotification.message_ta}`
+        : `📌 **Related update:** ${relevantNotification.message_en}`;
+      relevantUpdates.push({ type: 'existing_notification', text: updateText });
+    } else if (relatedCategorySchemes.length > 0) {
+      const rel = relatedCategorySchemes[0];
+      updateText = isTa
+        ? `📌 **தொடர்புடைய புதுப்பிப்பு:** இப்பிரிவில் (${rel.category}) அண்மையில் சரிபார்க்கப்பட்ட திட்டம் — **${rel.name_ta}** (${rel.department}).`
+        : `📌 **Related update:** A recently verified scheme in this category is also active — **${rel.name_en}** (${rel.department}).`;
+      relevantUpdates.push({ type: 'related_scheme', scheme: rel, text: updateText });
     }
 
     return {

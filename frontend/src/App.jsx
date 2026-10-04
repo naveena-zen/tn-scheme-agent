@@ -791,8 +791,6 @@ function TrackerComponent({ t, lang, user }) {
                 if (i > 0 && stageTime && historyMap[stages[i - 1]]?.timestamp) {
                   const ms = new Date(stageTime).getTime() - new Date(historyMap[stages[i - 1]].timestamp).getTime();
                   durationText = formatDuration(ms);
-                } else if (i === 0 && stageTime) {
-                  durationText = 'Initial Submission';
                 }
 
                 const displayName = stageDisplayNames[stageName]
