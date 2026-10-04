@@ -3,8 +3,10 @@ import {
   MessageSquare, BookOpen, Clock, Shield, Bell, LogIn, LogOut, Globe,
   Send, Mic, MicOff, ChevronDown, ChevronUp, Cpu, Wrench, Search,
   CheckCircle2, FileText, Activity, Volume2, X, Filter, ExternalLink,
-  Award, Building2, AlertTriangle, ShieldCheck, RefreshCw, Database, Sparkles, Check, AlertCircle
+  Award, Building2, AlertTriangle, ShieldCheck, RefreshCw, Database, Sparkles, Check, AlertCircle, Info, Loader2
 } from 'lucide-react';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 // ============================================================================
 // DUAL-LANGUAGE TRANSLATIONS (EN & TAMIL)
@@ -35,8 +37,19 @@ const translations = {
     benefits: "Benefits",
     documents: "Required Documents",
     tracker_title: "Application Status Tracking",
-    demo_disclaimer: "Demo Application ID: DEMO-APP-XXXX — internal record only, not a real government submission",
-    admin_title: "Government Admin Console"
+    demo_disclaimer: "Application Reference ID: APP-XXXX — electronic citizen assistance record",
+    demo_badge: "Autonomous Citizen Assistant",
+    about_demo: "Notice & Guidelines",
+    admin_title: "Government Admin Console",
+    details_title: "Scheme Details & Eligibility",
+    plain_criteria: "General Eligibility Requirements",
+    check_my_elig: "Check My Eligibility",
+    start_app_btn: "Start Demo Application",
+    view_details: "View Details & Apply",
+    eval_passed: "You ARE ELIGIBLE for this scheme!",
+    eval_failed: "You do not meet all criteria.",
+    eval_note_failed: "Note: You do not meet all criteria, but you may still submit an application if you hold special exemptions.",
+    eval_note_passed: "Recommended: Your profile matches the required eligibility criteria."
   },
   ta: {
     app_title: "தமிழ்நாடு குடிமக்கள் உதவி",
@@ -63,8 +76,19 @@ const translations = {
     benefits: "நன்மைகள்",
     documents: "தேவையான சான்றிதழ்கள்",
     tracker_title: "விண்ணப்ப நிலை கண்காணிப்பு",
-    demo_disclaimer: "மாதிரி விண்ணப்ப எண்: DEMO-APP-XXXX — உள் பதிவு மட்டுமே, இது உண்மையான அரசு சமர்ப்பிப்பு அல்ல",
-    admin_title: "அரசு நிர்வாகப் பலகை"
+    demo_disclaimer: "விண்ணப்பக் குறிப்பு எண்: APP-XXXX — மின்னணு குடிமக்கள் உதவி பதிவு",
+    demo_badge: "தன்னாட்சி குடிமக்கள் சேவை",
+    about_demo: "அறிவிப்புகள் & வழிகாட்டுதல்கள்",
+    admin_title: "அரசு நிர்வாகப் பலகை",
+    details_title: "திட்ட விவரங்கள் மற்றும் தகுதி வரம்புகள்",
+    plain_criteria: "பொதுவான தகுதித் தேவைகள்",
+    check_my_elig: "எனது தகுதியைச் சரிபார்க்கவும்",
+    start_app_btn: "மாதிரி விண்ணப்பத்தைத் தொடங்கவும்",
+    view_details: "விவரங்கள் & தகுதி பார்க்க",
+    eval_passed: "நீங்கள் இந்தத் திட்டத்திற்கு தகுதியுடையவர்!",
+    eval_failed: "நீங்கள் அனைத்து தகுதி வரம்புகளையும் பூர்த்தி செய்யவில்லை.",
+    eval_note_failed: "குறிப்பு: நீங்கள் அனைத்து வரம்புகளையும் பூர்த்தி செய்யவில்லை, எனினும் சிறப்பு விலக்குகள் இருந்தால் விண்ணப்பிக்கலாம்.",
+    eval_note_passed: "பரிந்துரை: உங்கள் விவரக்குறிப்பு தேவையான அனைத்து தகுதிகளுடன் பொருந்துகிறது."
   }
 };
 
@@ -79,6 +103,18 @@ export default function App() {
   const [selectedSchemeForApp, setSelectedSchemeForApp] = useState(null);
 
   const [unreadCount, setUnreadCount] = useState(0);
+  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
+  const [selectedSchemeForDetails, setSelectedSchemeForDetails] = useState(null);
+  const [initialChatQuery, setInitialChatQuery] = useState('');
+  const [toast, setToast] = useState(null);
+
+  const showToast = (message) => {
+    setToast(message);
+    setTimeout(() => {
+      setToast(prev => prev === message ? null : prev);
+    }, 4500);
+  };
+
   const t = (key) => translations[lang][key] || key;
 
   useEffect(() => {
@@ -95,14 +131,43 @@ export default function App() {
     setActiveTab('chat');
   };
 
+  const handleOpenDetails = (scheme) => {
+    setSelectedSchemeForDetails(scheme);
+    setDetailsModalOpen(true);
+  };
+
   const handleStartDemoApp = (scheme) => {
     if (!user) { setAuthModalOpen(true); return; }
     setSelectedSchemeForApp(scheme);
     setDemoAppModalOpen(true);
   };
 
+  const handleAskInChat = (scheme) => {
+    setDetailsModalOpen(false);
+    setActiveTab('chat');
+    setInitialChatQuery(lang === 'ta' ? `${scheme.name_ta} திட்டத்திற்கு நான் தகுதியானவரா?` : `Am I eligible for ${scheme.name_en}?`);
+  };
+
   return (
-    <div className="min-h-screen bg-[#090d16] text-slate-100 font-sans flex flex-col">
+    <div className="min-h-screen bg-[#090d16] text-slate-100 font-sans flex flex-col relative">
+      {/* Top Application Submission Toast Notification */}
+      {toast && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[100] max-w-md w-[calc(100%-2rem)] transition-all duration-300">
+          <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-emerald-950/95 border border-emerald-500/80 text-emerald-100 shadow-2xl shadow-emerald-950/90 backdrop-blur-md">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <CheckCircle2 size={18} className="text-emerald-400 shrink-0" />
+              <span className="text-xs font-semibold tracking-wide truncate">{toast}</span>
+            </div>
+            <button
+              onClick={() => setToast(null)}
+              className="p-1 rounded-lg text-emerald-400/80 hover:text-emerald-200 hover:bg-emerald-900/50 transition-colors shrink-0"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Navbar */}
       <header className="sticky top-0 z-40 glass-panel border-b border-slate-800 px-4 py-3">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
@@ -111,7 +176,9 @@ export default function App() {
               TN
             </div>
             <div>
-              <h1 className="text-lg font-bold text-white leading-tight">{t('app_title')}</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-lg font-bold text-white leading-tight">{t('app_title')}</h1>
+              </div>
               <p className="text-xs text-emerald-400 font-medium">{t('app_subtitle')}</p>
             </div>
           </div>
@@ -134,6 +201,7 @@ export default function App() {
           </nav>
 
           <div className="flex items-center space-x-3">
+
             <button onClick={() => setLang(lang === 'en' ? 'ta' : 'en')} className="flex items-center space-x-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-emerald-300 rounded-lg text-xs font-semibold border border-slate-700">
               <Globe size={14} /><span>{lang === 'en' ? 'தமிழ்' : 'English'}</span>
             </button>
@@ -163,8 +231,8 @@ export default function App() {
 
       {/* Main Content Body */}
       <main className="flex-1 pb-10">
-        {activeTab === 'chat' && <ChatComponent t={t} lang={lang} user={user} />}
-        {activeTab === 'schemes' && <SchemesComponent t={t} lang={lang} onStartDemoApp={handleStartDemoApp} />}
+        {activeTab === 'chat' && <ChatComponent t={t} lang={lang} user={user} initialQuery={initialChatQuery} onClearInitialQuery={() => setInitialChatQuery('')} />}
+        {activeTab === 'schemes' && <SchemesComponent t={t} lang={lang} onOpenDetails={handleOpenDetails} />}
         {activeTab === 'tracker' && <TrackerComponent t={t} lang={lang} user={user} />}
         {activeTab === 'admin' && user && user.role === 'admin' && <AdminComponent t={t} lang={lang} />}
       </main>
@@ -176,7 +244,120 @@ export default function App() {
       {/* Modals */}
       <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} onAuthSuccess={(u) => { setUser(u); setAuthModalOpen(false); }} />
       <NotificationsModal isOpen={notificationsOpen} onClose={() => setNotificationsOpen(false)} onUnreadUpdate={setUnreadCount} lang={lang} />
-      <DemoAppModal isOpen={demoAppModalOpen} onClose={() => setDemoAppModalOpen(false)} scheme={selectedSchemeForApp} lang={lang} t={t} onSubmitted={() => setActiveTab('tracker')} />
+      <SchemeDetailsModal isOpen={detailsModalOpen} onClose={() => setDetailsModalOpen(false)} scheme={selectedSchemeForDetails} lang={lang} t={t} user={user} onStartDemoApp={handleStartDemoApp} onAskInChat={handleAskInChat} />
+      <DemoAppModal
+        isOpen={demoAppModalOpen}
+        onClose={() => setDemoAppModalOpen(false)}
+        scheme={selectedSchemeForApp}
+        lang={lang}
+        t={t}
+        onSubmitted={(newRefId) => {
+          setActiveTab('tracker');
+          showToast(lang === 'ta'
+            ? `✅ மாதிரி விண்ணப்பம் சமர்ப்பிக்கப்பட்டது — எண்: ${newRefId}`
+            : `✅ Application submitted — Demo App ID: ${newRefId}`);
+        }}
+      />
+    </div>
+  );
+}
+
+// ============================================================================
+// FORMATTED MESSAGE COMPONENT (MARKDOWN LINKS, BOLD, HEADERS & BULLETS)
+// ============================================================================
+function FormattedMessage({ text }) {
+  if (!text) return null;
+
+  const lines = text.split('\n');
+
+  const renderInline = (str) => {
+    // Regex matching markdown link [label](url), raw URL http(s)://..., and bold **text**
+    const tokenRegex = /(\[[^\]]+\]\(https?:\/\/[^\s\)]+\)|https?:\/\/[^\s<>)"]+|\*\*[^*]+\*\*)/g;
+    const parts = [];
+    let lastIdx = 0;
+    let match;
+
+    while ((match = tokenRegex.exec(str)) !== null) {
+      if (match.index > lastIdx) {
+        parts.push(str.substring(lastIdx, match.index));
+      }
+      const token = match[0];
+      if (token.startsWith('[') && token.includes('](')) {
+        const labelEnd = token.indexOf('](');
+        const label = token.substring(1, labelEnd);
+        const url = token.substring(labelEnd + 2, token.length - 1);
+        parts.push(
+          <a
+            key={match.index}
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-emerald-400 hover:text-emerald-300 underline font-semibold transition-colors break-all"
+          >
+            <span>{label}</span>
+            <ExternalLink size={12} className="inline-block flex-shrink-0" />
+          </a>
+        );
+      } else if (token.startsWith('http://') || token.startsWith('https://')) {
+        let cleanUrl = token;
+        let suffix = '';
+        if (/[.,;:)]$/.test(cleanUrl)) {
+          suffix = cleanUrl.slice(-1);
+          cleanUrl = cleanUrl.slice(0, -1);
+        }
+        parts.push(
+          <a
+            key={match.index}
+            href={cleanUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-emerald-400 hover:text-emerald-300 underline font-semibold transition-colors break-all"
+          >
+            <span>{cleanUrl}</span>
+            <ExternalLink size={12} className="inline-block flex-shrink-0" />
+          </a>
+        );
+        if (suffix) parts.push(suffix);
+      } else if (token.startsWith('**') && token.endsWith('**')) {
+        const boldText = token.slice(2, -2);
+        parts.push(<strong key={match.index} className="font-semibold text-white">{boldText}</strong>);
+      }
+      lastIdx = tokenRegex.lastIndex;
+    }
+
+    if (lastIdx < str.length) {
+      parts.push(str.substring(lastIdx));
+    }
+
+    return parts.length > 0 ? parts : str;
+  };
+
+  return (
+    <div className="space-y-1.5 text-sm leading-relaxed">
+      {lines.map((line, idx) => {
+        const trimmed = line.trim();
+        if (!trimmed) {
+          return <div key={idx} className="h-1.5" />;
+        }
+        if (trimmed.startsWith('### ')) {
+          return <h4 key={idx} className="text-sm font-bold text-emerald-300 mt-2">{trimmed.slice(4)}</h4>;
+        }
+        if (trimmed.startsWith('## ')) {
+          return <h3 key={idx} className="text-base font-bold text-emerald-400 mt-2">{trimmed.slice(3)}</h3>;
+        }
+        if (trimmed.startsWith('# ')) {
+          return <h2 key={idx} className="text-lg font-bold text-white mt-2">{trimmed.slice(2)}</h2>;
+        }
+        if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+          return (
+            <div key={idx} className="flex items-start gap-2 ml-1">
+              <span className="text-emerald-400 mt-0.5">•</span>
+              <span className="flex-1">{renderInline(trimmed.slice(2))}</span>
+            </div>
+          );
+        }
+        return <div key={idx}>{renderInline(line)}</div>;
+      })}
     </div>
   );
 }
@@ -184,7 +365,7 @@ export default function App() {
 // ============================================================================
 // CHAT INTERFACE COMPONENT WITH COLLAPSIBLE REASONING TRACE
 // ============================================================================
-function ChatComponent({ t, lang, user }) {
+function ChatComponent({ t, lang, user, initialQuery, onClearInitialQuery }) {
   const [messages, setMessages] = useState([{ id: 'welcome', sender: 'agent', text: t('welcome'), trace: [] }]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -193,6 +374,13 @@ function ChatComponent({ t, lang, user }) {
   const endRef = useRef(null);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
+
+  useEffect(() => {
+    if (initialQuery) {
+      handleSend(initialQuery);
+      if (onClearInitialQuery) onClearInitialQuery();
+    }
+  }, [initialQuery]);
 
   const handleSend = async (customText = null) => {
     const text = customText || input;
@@ -208,10 +396,15 @@ function ChatComponent({ t, lang, user }) {
       if (token && token !== 'null' && token !== 'undefined' && token.trim() !== '') {
         headers['Authorization'] = `Bearer ${token}`;
       }
-      const res = await fetch('http://localhost:5000/api/chat', {
+      const history = messages
+        .filter(m => m.id !== 'welcome')
+        .map(m => ({ sender: m.sender, text: m.text }))
+        .slice(-6);
+
+      const res = await fetch(`${API_URL}/api/chat`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ message: text, language: lang })
+        body: JSON.stringify({ message: text, language: lang, history })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Chat request failed');
@@ -244,11 +437,45 @@ function ChatComponent({ t, lang, user }) {
         {messages.map((msg) => (
           <div key={msg.id} className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}>
             <div className={`max-w-[85%] rounded-2xl p-4 shadow-lg text-sm leading-relaxed ${msg.sender === 'user' ? 'bg-gradient-to-r from-emerald-600 to-teal-700 text-white rounded-br-none' : 'glass-panel border border-slate-800 text-slate-100 rounded-bl-none'}`}>
-              <div className="whitespace-pre-line">{msg.text}</div>
+              <FormattedMessage text={msg.text} />
+              {msg.trace && msg.trace.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-slate-800/80 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedTraceId(expandedTraceId === msg.id ? null : msg.id)}
+                    className="flex items-center gap-1.5 text-emerald-400 hover:text-emerald-300 font-medium"
+                  >
+                    <Cpu size={14} />
+                    <span>{expandedTraceId === msg.id ? t('hide_trace') : t('show_trace')} ({msg.trace.length} {lang === 'ta' ? 'கருவிகள்' : 'tool steps'})</span>
+                    {expandedTraceId === msg.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </button>
+                  {expandedTraceId === msg.id && (
+                    <div className="mt-2 space-y-1.5 p-2 bg-slate-900/90 rounded-xl border border-slate-800 text-[11px] font-mono">
+                      <div className="font-semibold text-slate-400 flex items-center gap-1 pb-1 border-b border-slate-800">
+                        <Activity size={12} className="text-emerald-400" />
+                        <span>{t('trace_title')}</span>
+                      </div>
+                      {msg.trace.map((step, sIdx) => (
+                        <div key={sIdx} className="p-2 rounded bg-slate-950/80 border border-slate-800">
+                          <div className="text-emerald-400 font-semibold flex items-center gap-1">
+                            <Wrench size={11} />
+                            <span>Step {sIdx + 1}: {step.tool}</span>
+                          </div>
+                          {step.input && (
+                            <div className="text-slate-400 mt-1 truncate">
+                              Input: {JSON.stringify(step.input)}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         ))}
-        {loading && <div className="text-xs text-slate-400 p-3 glass-panel rounded-2xl w-max">Gemini Agent reasoning...</div>}
+        {loading && <div className="text-xs text-slate-400 p-3 glass-panel rounded-2xl w-max flex items-center gap-2"><RefreshCw size={12} className="animate-spin text-emerald-400" /><span>Gemini Agent reasoning...</span></div>}
         <div ref={endRef} />
       </div>
 
@@ -268,47 +495,101 @@ function ChatComponent({ t, lang, user }) {
 // ============================================================================
 // SCHEME BROWSER COMPONENT
 // ============================================================================
-function SchemesComponent({ t, lang, onStartDemoApp }) {
+// ============================================================================
+// SCHEME BROWSER COMPONENT
+// ============================================================================
+function SchemesComponent({ t, lang, onOpenDetails }) {
   const [schemes, setSchemes] = useState([]);
   const [category, setCategory] = useState('');
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
-    fetch('http://localhost:5000/api/schemes').then(r => r.json()).then(setSchemes).catch(() => {});
+    fetch(`${API_URL}/api/schemes`).then(r => r.json()).then(setSchemes).catch(() => {});
   }, []);
 
-  const filtered = category ? schemes.filter(s => s.category.includes(category)) : schemes;
+  const categories = Array.from(new Set(schemes.map(s => s.category).filter(Boolean))).sort();
+
+  const filtered = schemes.filter(s => {
+    const matchesCat = !category || s.category.toLowerCase() === category.toLowerCase();
+    const query = search.toLowerCase().trim();
+    const matchesSearch = !query ||
+      (s.name_en && s.name_en.toLowerCase().includes(query)) ||
+      (s.name_ta && s.name_ta.includes(query)) ||
+      (s.department && s.department.toLowerCase().includes(query)) ||
+      (s.category && s.category.toLowerCase().includes(query));
+    return matchesCat && matchesSearch;
+  });
 
   return (
     <div className="max-w-7xl mx-auto p-4 space-y-6">
       <div className="glass-panel p-5 rounded-2xl border border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4">
         <div>
-          <h2 className="text-xl font-bold text-white">{t('schemes_title')}</h2>
-          <p className="text-xs text-slate-400 mt-1">Verified Tamil Nadu State Government schemes</p>
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-bold text-white">{t('schemes_title')}</h2>
+            <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800 font-semibold">
+              {filtered.length} / {schemes.length}
+            </span>
+          </div>
+          <p className="text-xs text-slate-400 mt-1">Verified Tamil Nadu State Government schemes across all welfare departments</p>
         </div>
-        <select value={category} onChange={(e) => setCategory(e.target.value)} className="bg-slate-900 border border-slate-700 text-xs text-slate-200 px-3 py-2 rounded-xl">
-          <option value="">{t('all')} Categories</option>
-          <option value="Education">Education</option>
-          <option value="Women Welfare">Women Welfare</option>
-          <option value="Healthcare">Healthcare</option>
-          <option value="Skill Development">Skill Development</option>
-        </select>
+
+        <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-3 text-slate-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={lang === 'ta' ? 'திட்டம் அல்லது துறை தேட...' : 'Search scheme or department...'}
+              className="bg-slate-900 border border-slate-700 text-xs text-slate-200 pl-8 pr-3 py-2 rounded-xl focus:outline-none focus:border-emerald-500 w-full sm:w-56"
+            />
+          </div>
+
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            className="bg-slate-900 border border-slate-700 text-xs text-slate-200 px-3 py-2 rounded-xl focus:outline-none focus:border-emerald-500"
+          >
+            <option value="">{t('all')} ({schemes.length} Schemes)</option>
+            {categories.map((cat) => (
+              <option key={cat} value={cat}>{cat}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {filtered.map((s) => {
-          const docs = typeof s.documents_required === 'string' ? JSON.parse(s.documents_required) : s.documents_required;
           return (
-            <div key={s.id} className="glass-card rounded-2xl p-5 flex flex-col justify-between space-y-4">
-              <div>
-                <span className="text-[10px] font-bold px-2.5 py-1 bg-emerald-950 text-emerald-400 border border-emerald-800 rounded-lg uppercase">{s.category}</span>
-                <h3 className="text-base font-bold text-white mt-3">{lang === 'ta' ? s.name_ta : s.name_en}</h3>
-                <div className="mt-3 p-3 bg-slate-900 rounded-xl border border-slate-800 text-xs text-slate-300">
-                  <div className="font-semibold text-amber-400 mb-1">{t('benefits')}</div>
-                  <p>{lang === 'ta' ? s.benefits_ta : s.benefits_en}</p>
+            <div key={s.id} className="glass-card rounded-2xl p-5 flex flex-col justify-between space-y-4 hover:border-slate-700 transition-all">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-bold px-2.5 py-1 bg-emerald-950 text-emerald-400 border border-emerald-800 rounded-lg uppercase">
+                    {s.category}
+                  </span>
+                  <span className="text-[11px] text-slate-500 font-medium truncate max-w-[150px]" title={s.department}>
+                    {s.department}
+                  </span>
+                </div>
+                <h3 className="text-base font-bold text-white leading-snug">
+                  {lang === 'ta' ? s.name_ta : s.name_en}
+                </h3>
+                <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-800 text-xs text-slate-300">
+                  <div className="font-semibold text-amber-400 mb-1 flex items-center gap-1">
+                    <Sparkles size={12} />
+                    <span>{t('benefits')}</span>
+                  </div>
+                  <p className="line-clamp-3 leading-relaxed">{lang === 'ta' ? (s.benefits_ta || s.benefits_en) : (s.benefits_en || s.benefits_ta)}</p>
                 </div>
               </div>
-              <button onClick={() => onStartDemoApp(s)} className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold flex items-center justify-center space-x-1">
-                <CheckCircle2 size={14} /><span>{t('apply')}</span>
+
+              <button
+                type="button"
+                onClick={() => onOpenDetails(s)}
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold flex items-center justify-center space-x-1.5 shadow-md shadow-emerald-950/40 transition-all hover:scale-[1.01]"
+              >
+                <Info size={14} />
+                <span>{t('view_details')}</span>
               </button>
             </div>
           );
@@ -319,56 +600,320 @@ function SchemesComponent({ t, lang, onStartDemoApp }) {
 }
 
 // ============================================================================
-// TRACKER COMPONENT
+// TRACKER COMPONENT (SHIPMENT / PROCESS TRACKER REDESIGN)
 // ============================================================================
+function formatDuration(ms) {
+  if (!ms || ms <= 0 || isNaN(ms)) return null;
+  const mins = Math.floor(ms / (1000 * 60));
+  const hours = Math.floor(mins / 60);
+  const days = Math.floor(hours / 24);
+  if (days > 0) {
+    const remHours = hours % 24;
+    return remHours > 0 ? `${days}d ${remHours}h` : `${days} days`;
+  }
+  if (hours > 0) {
+    const remMins = mins % 60;
+    return remMins > 0 ? `${hours} hr ${remMins} mins` : `${hours} hrs`;
+  }
+  if (mins > 0) return `${mins} mins`;
+  return '< 1 min';
+}
+
 function TrackerComponent({ t, lang, user }) {
   const [searchId, setSearchId] = useState('DEMO-APP-1001');
   const [app, setApp] = useState(null);
+  const [showAboutDemo, setShowAboutDemo] = useState(false);
+  const [expandedStages, setExpandedStages] = useState({});
+  const [trackingLoading, setTrackingLoading] = useState(false);
+
+  const toggleStageExpand = (stageKey) => {
+    setExpandedStages(prev => ({ ...prev, [stageKey]: !prev[stageKey] }));
+  };
 
   const track = async (id = searchId) => {
+    if (!id || !id.trim()) return;
+    setTrackingLoading(true);
     try {
       const token = localStorage.getItem('accessToken');
-      const res = await fetch(`http://localhost:5000/api/applications/${id}`, { headers: { 'Authorization': `Bearer ${token}` } });
-      if (res.ok) setApp(await res.json());
-    } catch (e) {}
+      const res = await fetch(`${API_URL}/api/applications/${id.trim()}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setApp(await res.json());
+      }
+    } catch (e) {
+      console.warn('Track application error:', e);
+    } finally {
+      setTrackingLoading(false);
+    }
   };
 
   useEffect(() => { track('DEMO-APP-1001'); }, []);
 
   const history = app ? (typeof app.status_history === 'string' ? JSON.parse(app.status_history) : app.status_history) : [];
 
+  const isRejected = app && (app.status === 'Rejected' || history.some(h => h.stage === 'Rejected'));
+  const stages = [
+    'Applied',
+    'Document Verification',
+    'Field Verification',
+    isRejected ? 'Rejected' : 'Approved',
+    'Disbursed'
+  ];
+
+  const historyMap = {};
+  history.forEach(h => {
+    historyMap[h.stage] = h;
+  });
+
+  const currentStageIndex = app ? stages.indexOf(app.status) : 0;
+  const activeIndex = currentStageIndex !== -1 ? currentStageIndex : 0;
+
+  const stageDisplayNames = {
+    'Applied': { en: 'Application Submitted', ta: 'விண்ணப்பம் சமர்ப்பிக்கப்பட்டது' },
+    'Document Verification': { en: 'Document Verification', ta: 'சான்றிதழ் சரிபார்ப்பு' },
+    'Field Verification': { en: 'Field Verification & Inspection', ta: 'கள ஆய்வு & தணிக்கை' },
+    'Approved': { en: 'Application Approved', ta: 'விண்ணப்பம் ஏற்றுக்கொள்ளப்பட்டது' },
+    'Rejected': { en: 'Application Rejected', ta: 'விண்ணப்பம் நிராகரிக்கப்பட்டது' },
+    'Disbursed': { en: 'Benefit Disbursed', ta: 'பயன்பாடு வழங்கப்பட்டது' }
+  };
+
   return (
-    <div className="max-w-5xl mx-auto p-4 space-y-6">
+    <div className="max-w-4xl mx-auto p-4 space-y-6">
       <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-        <h2 className="text-xl font-bold text-white flex items-center gap-2"><Clock className="text-emerald-400" size={22} />{t('tracker_title')}</h2>
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              <Clock className="text-emerald-400" size={22} />
+              {t('tracker_title')}
+            </h2>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowAboutDemo(!showAboutDemo)}
+            className="text-xs text-slate-400 hover:text-emerald-300 flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl transition-colors"
+          >
+            <Info size={14} className="text-emerald-400" />
+            <span>{t('about_demo')}</span>
+            <ChevronDown size={14} className={`transform transition-transform ${showAboutDemo ? 'rotate-180' : ''}`} />
+          </button>
+        </div>
+
+        {showAboutDemo && (
+          <div className="p-3.5 bg-slate-900/90 border border-slate-700/60 rounded-xl text-slate-300 text-xs space-y-1.5">
+            <div className="font-semibold text-emerald-400 flex items-center gap-1.5">
+              <AlertCircle size={15} />
+              <span>{lang === 'ta' ? 'விண்ணப்பக் கண்காணிப்பு வழிகாட்டுதல்' : 'Application Tracking Guidelines'}</span>
+            </div>
+            <p className="leading-relaxed">
+              {lang === 'ta'
+                ? 'உங்கள் மாதிரி விண்ணப்பக் குறிப்பு எண்ணை உள்ளிட்டு சரிபார்ப்பு நிலைகள், துறை கள ஆய்வுகள் மற்றும் நிதி ஒதுக்கீடுகளை நிகழ்நேரத்தில் கண்காணிக்கலாம்.'
+                : 'Enter your demo application reference ID to track submission milestones, document verification, field audits, and fund disbursement in real-time.'}
+            </p>
+          </div>
+        )}
+
         <div className="flex gap-2">
-          <input type="text" value={searchId} onChange={(e) => setSearchId(e.target.value)} placeholder="DEMO-APP-1001..." className="flex-1 bg-slate-900 border border-slate-700 text-white font-mono text-sm px-4 py-2 rounded-xl" />
-          <button onClick={() => track()} className="px-5 py-2 bg-emerald-600 text-white text-xs font-semibold rounded-xl">Track</button>
+          <input
+            type="text"
+            value={searchId}
+            onChange={(e) => setSearchId(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') track(); }}
+            placeholder="Enter application reference ID (e.g. DEMO-APP-1001)..."
+            className="flex-1 bg-slate-900 border border-slate-700 text-white font-mono text-sm px-4 py-2.5 rounded-xl focus:border-emerald-500 focus:outline-none transition-colors"
+          />
+          <button
+            onClick={() => track()}
+            disabled={trackingLoading}
+            className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-semibold rounded-xl transition-colors flex items-center gap-1.5"
+          >
+            {trackingLoading && <Loader2 size={14} className="animate-spin" />}
+            <span>Track</span>
+          </button>
         </div>
       </div>
 
       {app && (
-        <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-6">
-          <div className="flex justify-between border-b border-slate-800 pb-3">
+        <div className="glass-panel p-6 sm:p-8 rounded-2xl border border-slate-800 space-y-6">
+          {/* Header Card */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-5 border-b border-slate-800/80 gap-3">
             <div>
-              <div className="text-xs text-slate-400 font-mono">Demo Ref ID</div>
-              <div className="text-xl font-bold text-emerald-400 font-mono">{app.demo_reference_id}</div>
+              <div className="text-xs text-slate-400 font-mono">Application Reference ID</div>
+              <div className="text-2xl font-bold text-emerald-400 font-mono tracking-tight mt-0.5">
+                {app.demo_reference_id}
+              </div>
             </div>
-            <span className="px-3 py-1 text-xs font-bold rounded-lg bg-emerald-950 text-emerald-400 border border-emerald-800 uppercase">{app.status}</span>
-          </div>
-          <div>
-            <h3 className="text-base font-bold text-white">{lang === 'ta' ? app.name_ta : app.name_en}</h3>
-            <p className="text-xs text-slate-400">Applicant: {app.applicant_name}</p>
+            <div className="flex items-center gap-3">
+              <span className={`px-3.5 py-1.5 text-xs font-bold rounded-xl uppercase tracking-wider border ${
+                app.status === 'Disbursed' ? 'bg-emerald-950 text-emerald-300 border-emerald-700' :
+                app.status === 'Rejected' ? 'bg-rose-950 text-rose-300 border-rose-700' :
+                'bg-amber-950/70 text-amber-300 border-amber-800'
+              }`}>
+                {app.status}
+              </span>
+            </div>
           </div>
 
-          <div className="space-y-2 pt-2">
-            <div className="text-xs font-bold text-slate-300">Status Audit History</div>
-            {history.map((h, i) => (
-              <div key={i} className="bg-slate-900 p-3 rounded-xl border border-slate-800 flex justify-between text-xs">
-                <div><span className="font-bold text-emerald-400 mr-2">{h.stage}</span><span className="text-slate-300">{h.remarks}</span></div>
-                <span className="text-[11px] text-slate-500 font-mono">{new Date(h.timestamp).toLocaleString()}</span>
-              </div>
-            ))}
+          {/* Scheme & Applicant Info */}
+          <div className="p-4 bg-slate-900/60 rounded-xl border border-slate-800/80 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+            <div>
+              <div className="text-[11px] text-slate-400 uppercase tracking-wider font-semibold">Scheme</div>
+              <h3 className="text-sm sm:text-base font-bold text-white mt-0.5">
+                {lang === 'ta' ? (app.name_ta || app.name_en) : app.name_en}
+              </h3>
+            </div>
+            <div className="sm:text-right">
+              <div className="text-[11px] text-slate-400 uppercase tracking-wider font-semibold">Applicant</div>
+              <div className="text-sm font-semibold text-slate-200 mt-0.5">{app.applicant_name}</div>
+            </div>
+          </div>
+
+          {/* Shipment-Style Vertical Process Tracker */}
+          <div className="space-y-3 pt-2">
+            <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+              <Activity size={15} className="text-emerald-400" />
+              <span>Live Application Process Timeline</span>
+            </div>
+
+            <div className="relative pl-2 sm:pl-4 pt-4">
+              {stages.map((stageName, i) => {
+                const isCompleted = i < activeIndex || (i === activeIndex && (stageName === 'Disbursed' || (app.status === 'Disbursed' && i === stages.length - 1)));
+                const isCurrent = i === activeIndex && !isCompleted;
+                const isUnreached = i > activeIndex && !isCompleted;
+                const isStageRejected = stageName === 'Rejected' && isCurrent;
+
+                const stageData = historyMap[stageName];
+                const stageTime = stageData?.timestamp;
+
+                // Duration since previous stage
+                let durationText = null;
+                if (i > 0 && stageTime && historyMap[stages[i - 1]]?.timestamp) {
+                  const ms = new Date(stageTime).getTime() - new Date(historyMap[stages[i - 1]].timestamp).getTime();
+                  durationText = formatDuration(ms);
+                } else if (i === 0 && stageTime) {
+                  durationText = 'Initial Submission';
+                }
+
+                const displayName = stageDisplayNames[stageName]
+                  ? (lang === 'ta' ? stageDisplayNames[stageName].ta : stageDisplayNames[stageName].en)
+                  : stageName;
+
+                const isExpanded = !!expandedStages[stageName];
+                const isLastStage = i === stages.length - 1;
+
+                return (
+                  <div key={stageName} className="relative flex items-start group">
+                    {/* Vertical connecting line */}
+                    {!isLastStage && (
+                      <div
+                        className={`absolute left-[15px] top-[30px] w-[2px] h-[calc(100%-8px)] transition-colors duration-300 ${
+                          i < activeIndex ? 'bg-emerald-500' : 'bg-slate-800'
+                        }`}
+                      />
+                    )}
+
+                    {/* Stage Icon Node */}
+                    <div className="relative z-10 flex-shrink-0 mr-4">
+                      {isCompleted ? (
+                        <div className="w-8 h-8 rounded-full bg-emerald-500/20 border-2 border-emerald-500 text-emerald-400 flex items-center justify-center shadow-lg shadow-emerald-950/50">
+                          <Check size={16} strokeWidth={3} />
+                        </div>
+                      ) : isStageRejected ? (
+                        <div className="w-8 h-8 rounded-full bg-rose-500/20 border-2 border-rose-500 text-rose-400 flex items-center justify-center shadow-lg shadow-rose-950/50">
+                          <X size={16} strokeWidth={3} />
+                        </div>
+                      ) : isCurrent ? (
+                        <div className="relative w-8 h-8 rounded-full bg-amber-500/20 border-2 border-amber-400 text-amber-300 flex items-center justify-center shadow-lg shadow-amber-950/50">
+                          <span className="absolute w-full h-full rounded-full bg-amber-400/20 animate-ping" />
+                          <div className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+                        </div>
+                      ) : (
+                        /* Unreached / Pending stage — Plain greyed-out icon, explicitly NO checkmark */
+                        <div className="w-8 h-8 rounded-full bg-slate-900 border border-slate-800 text-slate-600 flex items-center justify-center text-xs font-mono font-medium">
+                          {i + 1}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Stage Content Card */}
+                    <div className="flex-1 pb-7 min-w-0">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`text-sm font-bold ${
+                            isCompleted ? 'text-white' :
+                            isCurrent ? 'text-amber-300' :
+                            'text-slate-500'
+                          }`}>
+                            {displayName}
+                          </span>
+
+                          {isCompleted && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-950 text-emerald-400 border border-emerald-800/80">
+                              Completed
+                            </span>
+                          )}
+                          {isCurrent && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-950 text-amber-400 border border-amber-800/80 animate-pulse">
+                              In Progress
+                            </span>
+                          )}
+                          {isUnreached && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-slate-900 text-slate-500 border border-slate-800">
+                              Pending
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Timestamp & Duration */}
+                        <div className="flex items-center gap-3 text-xs">
+                          {durationText && isCompleted && (
+                            <span className="text-[11px] font-mono text-emerald-400 bg-emerald-950/40 px-2 py-0.5 rounded-lg border border-emerald-900/50">
+                              ⏱️ {durationText}
+                            </span>
+                          )}
+                          <span className="text-[11px] font-mono text-slate-400">
+                            {stageTime ? new Date(stageTime).toLocaleString(lang === 'ta' ? 'ta-IN' : 'en-IN', {
+                              month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                            }) : (isUnreached ? '—' : 'In Progress')}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Expandable "View details" (matching "View all updates" pattern) */}
+                      {(stageData || isCurrent) && (
+                        <div className="mt-2">
+                          <button
+                            type="button"
+                            onClick={() => toggleStageExpand(stageName)}
+                            className="text-[11px] text-emerald-400 hover:text-emerald-300 inline-flex items-center gap-1 transition-colors font-medium"
+                          >
+                            <span>{isExpanded ? (lang === 'ta' ? 'விவரங்களை மறைக்க' : 'Hide details') : (lang === 'ta' ? 'அனைத்து விவரங்களையும் பார்க்க' : 'View all updates')}</span>
+                            <ChevronDown size={13} className={`transform transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                          </button>
+
+                          {isExpanded && (
+                            <div className="mt-2.5 p-3 rounded-xl bg-slate-900/90 border border-slate-800 text-xs text-slate-300 space-y-1.5">
+                              <div className="text-[11px] font-semibold text-slate-400">
+                                {lang === 'ta' ? 'அலுவல் குறிப்புகள் & சரிபார்ப்பு:' : 'Audit Remarks & Notes:'}
+                              </div>
+                              <p className="text-slate-200 leading-relaxed font-sans">
+                                {stageData?.remarks || (isCurrent ? 'Under review by authorized verification officers.' : 'Stage verified.')}
+                              </p>
+                              {stageTime && (
+                                <div className="text-[10px] font-mono text-slate-500 pt-1 border-t border-slate-800/80">
+                                  Logged at: {new Date(stageTime).toISOString()}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
@@ -388,8 +933,8 @@ function AdminComponent({ t, lang }) {
 
   const load = () => {
     const token = localStorage.getItem('accessToken');
-    fetch('http://localhost:5000/api/applications', { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json()).then(data => { setApps(data); if (data.length > 0) setSelectedId(data[0].demo_reference_id); });
-    fetch('http://localhost:5000/api/admin/pending-schemes', { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json()).then(setPending);
+    fetch(`${API_URL}/api/applications`, { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json()).then(data => { setApps(data); if (data.length > 0) setSelectedId(data[0].demo_reference_id); });
+    fetch(`${API_URL}/api/admin/pending-schemes`, { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json()).then(setPending);
   };
 
   useEffect(() => { load(); }, []);
@@ -397,7 +942,7 @@ function AdminComponent({ t, lang }) {
   const handleAdvance = async (e) => {
     e.preventDefault();
     const token = localStorage.getItem('accessToken');
-    await fetch(`http://localhost:5000/api/applications/${selectedId}/status`, {
+    await fetch(`${API_URL}/api/applications/${selectedId}/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ new_stage: stage, remarks })
@@ -407,7 +952,7 @@ function AdminComponent({ t, lang }) {
 
   const handleApprove = async (id) => {
     const token = localStorage.getItem('accessToken');
-    await fetch(`http://localhost:5000/api/admin/approve-scheme/${id}`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+    await fetch(`${API_URL}/api/admin/approve-scheme/${id}`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
     load();
   };
 
@@ -454,42 +999,99 @@ function AuthModal({ isOpen, onClose, onAuthSuccess }) {
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('user');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const endpoint = isLogin ? '/api/auth/login' : '/api/auth/signup';
-    const res = await fetch(`http://localhost:5000${endpoint}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, password, role })
-    });
-    const data = await res.json();
-    if (res.ok) {
-      localStorage.setItem('accessToken', data.accessToken);
-      localStorage.setItem('user', JSON.stringify(data.user));
-      onAuthSuccess(data.user);
+    setError('');
+    setLoading(true);
+    try {
+      const endpoint = isLogin ? '/api/auth/login' : '/api/auth/signup';
+      const res = await fetch(`${API_URL}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim(), password, role })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        localStorage.setItem('accessToken', data.accessToken);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        onAuthSuccess(data.user);
+      } else {
+        setError(data.error || 'Authentication failed. Please check your credentials.');
+      }
+    } catch (err) {
+      setError('Cannot connect to server. Please check backend connection.');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
       <div className="relative w-full max-w-sm glass-panel p-6 rounded-2xl border border-slate-800">
-        <button onClick={onClose} className="absolute top-4 right-4 text-slate-400"><X size={18} /></button>
+        <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-white"><X size={18} /></button>
         <h2 className="text-lg font-bold text-white mb-4">{isLogin ? 'Sign In' : 'Register Profile'}</h2>
+
+        {error && (
+          <div className="mb-3 p-2.5 bg-rose-950/60 border border-rose-800/70 text-rose-300 rounded-xl text-xs font-medium flex items-center">
+            {error}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-3 text-xs">
-          <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Username" required className="w-full bg-slate-900 border border-slate-700 text-white p-2.5 rounded-xl" />
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" required className="w-full bg-slate-900 border border-slate-700 text-white p-2.5 rounded-xl" />
+          <div>
+            <label className="text-slate-400 text-[11px] block mb-1">Username</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Madhu Nisha"
+              required
+              className="w-full bg-slate-900 border border-slate-700 text-white p-2.5 rounded-xl focus:border-emerald-500 focus:outline-none"
+            />
+          </div>
+          <div>
+            <label className="text-slate-400 text-[11px] block mb-1">Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="e.g. UserPass123!"
+              required
+              className="w-full bg-slate-900 border border-slate-700 text-white p-2.5 rounded-xl focus:border-emerald-500 focus:outline-none"
+            />
+          </div>
           {!isLogin && (
-            <select value={role} onChange={(e) => setRole(e.target.value)} className="w-full bg-slate-900 border border-slate-700 text-white p-2.5 rounded-xl">
-              <option value="user">Citizen User</option>
-              <option value="admin">Government Admin</option>
-            </select>
+            <div>
+              <label className="text-slate-400 text-[11px] block mb-1">Account Role</label>
+              <select
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 text-white p-2.5 rounded-xl focus:border-emerald-500 focus:outline-none"
+              >
+                <option value="user">Citizen User</option>
+                <option value="admin">Government Admin</option>
+              </select>
+            </div>
           )}
-          <button type="submit" className="w-full py-2.5 bg-emerald-600 text-white font-semibold rounded-xl">{isLogin ? 'Sign In' : 'Register'}</button>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold rounded-xl transition-colors shadow-lg shadow-emerald-950"
+          >
+            {loading ? 'Authenticating...' : (isLogin ? 'Sign In' : 'Register')}
+          </button>
         </form>
-        <button onClick={() => setIsLogin(!isLogin)} className="mt-3 text-xs text-emerald-400 underline">{isLogin ? 'Need an account? Register' : 'Have an account? Sign In'}</button>
+        <button
+          onClick={() => { setIsLogin(!isLogin); setError(''); }}
+          className="mt-3 text-xs text-emerald-400 hover:text-emerald-300 underline block text-center w-full"
+        >
+          {isLogin ? 'Need an account? Register' : 'Have an account? Sign In'}
+        </button>
       </div>
     </div>
   );
@@ -500,7 +1102,7 @@ function NotificationsModal({ isOpen, onClose, onUnreadUpdate, lang }) {
   useEffect(() => {
     if (isOpen) {
       const token = localStorage.getItem('accessToken');
-      fetch('http://localhost:5000/api/notifications', { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json()).then(data => { setList(data); onUnreadUpdate(data.filter(n => !n.is_read).length); });
+      fetch(`${API_URL}/api/notifications`, { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json()).then(data => { setList(data); onUnreadUpdate(data.filter(n => !n.is_read).length); });
     }
   }, [isOpen]);
 
@@ -524,38 +1126,516 @@ function NotificationsModal({ isOpen, onClose, onUnreadUpdate, lang }) {
   );
 }
 
+// ============================================================================
+// SCHEME DETAILS & ELIGIBILITY MODAL (REQUIREMENTS-FIRST WITH TRIGGERED CHECK)
+// ============================================================================
+function SchemeDetailsModal({ isOpen, onClose, scheme, lang, t, onStartDemoApp, onAskInChat, user }) {
+  const [showCheckForm, setShowCheckForm] = useState(false);
+  const [inputs, setInputs] = useState({ age: '', gender: '', income: '', community_category: '', occupation: '', district: '' });
+  const [evalResult, setEvalResult] = useState(null);
+  const [checking, setChecking] = useState(false);
+  const [saveStatus, setSaveStatus] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      setShowCheckForm(false);
+      setEvalResult(null);
+      setChecking(false);
+      setSaveStatus('');
+      setInputs({ age: '', gender: '', income: '', community_category: '', occupation: '', district: '' });
+    }
+  }, [isOpen, scheme]);
+
+  if (!isOpen || !scheme) return null;
+
+  const rules = typeof scheme.eligibility_rules === 'string'
+    ? JSON.parse(scheme.eligibility_rules)
+    : (scheme.eligibility_rules || {});
+
+  const docs = Array.isArray(scheme.documents_required)
+    ? scheme.documents_required
+    : (typeof scheme.documents_required === 'string'
+        ? (scheme.documents_required.startsWith('[') ? JSON.parse(scheme.documents_required) : [scheme.documents_required])
+        : []);
+
+  const hasAgeReq = rules.min_age !== undefined || rules.max_age !== undefined;
+  const hasGenderReq = rules.gender && rules.gender.toLowerCase() !== 'any' && rules.gender.toLowerCase() !== 'all';
+  const hasIncomeReq = rules.max_income !== undefined && Number(rules.max_income) > 0;
+  const hasCommunityReq = rules.community_category && !['any', 'all'].includes(String(rules.community_category).toLowerCase());
+  const hasOccupationReq = rules.occupation && !['any', 'all'].includes(String(rules.occupation).toLowerCase());
+
+  const handleVerify = async (e) => {
+    if (e) e.preventDefault();
+    setChecking(true);
+    setEvalResult(null);
+    setSaveStatus('');
+    try {
+      const res = await fetch(`${API_URL}/api/schemes/${scheme.id}/check-eligibility`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_profile: inputs })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to verify');
+      setEvalResult(data);
+    } catch (err) {
+      setEvalResult({ error: err.message });
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    const token = localStorage.getItem('accessToken');
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_URL}/api/users/profile`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(inputs)
+      });
+      if (res.ok) {
+        setSaveStatus(lang === 'ta' ? 'சுயவிவரத்தில் சேமிக்கப்பட்டது ✓' : 'Saved to profile ✓');
+      }
+    } catch (e) {}
+  };
+
+  const handleApplyClick = () => {
+    onClose();
+    onStartDemoApp(scheme);
+  };
+
+  const ageText = hasAgeReq
+    ? `${rules.min_age ?? 0} to ${rules.max_age ? rules.max_age + ' ' + (lang === 'ta' ? 'வயது' : 'years') : (lang === 'ta' ? 'மேல்' : 'and above')}`
+    : (lang === 'ta' ? 'குறிப்பிட்ட வயது வரம்பு இல்லை' : 'No specific age limit');
+
+  const genderText = hasGenderReq
+    ? (lang === 'ta' ? (rules.gender === 'Female' ? 'பெண்கள் மட்டும்' : rules.gender) : rules.gender)
+    : (lang === 'ta' ? 'அனைத்து பாலினத்தவரும்' : 'Any / All Genders');
+
+  const incomeText = hasIncomeReq
+    ? `≤ ₹${Number(rules.max_income).toLocaleString('en-IN')} / ${lang === 'ta' ? 'ஆண்டு' : 'year'}`
+    : (lang === 'ta' ? 'வருமான உச்சவரம்பு இல்லை' : 'No income ceiling');
+
+  const communityText = hasCommunityReq
+    ? (Array.isArray(rules.community_category) ? rules.community_category.join(', ') : rules.community_category)
+    : (lang === 'ta' ? 'அனைத்து சமூகப் பிரிவினர்' : 'All communities');
+
+  const districtText = rules.district || (lang === 'ta' ? 'தமிழ்நாடு முழுவதும் (38 மாவட்டங்கள்)' : 'All 38 districts of Tamil Nadu');
+  const occupationText = rules.occupation || (lang === 'ta' ? 'அனைத்து தகுதியான குடிமக்கள்' : 'Open to all eligible citizen groups');
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
+      <div className="relative w-full max-w-2xl glass-panel p-6 rounded-2xl border border-slate-800 space-y-5 my-8 max-h-[90vh] overflow-y-auto scrollbar-thin">
+        <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg">
+          <X size={20} />
+        </button>
+
+        {/* Header */}
+        <div className="space-y-2 border-b border-slate-800 pb-4">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-bold px-2.5 py-0.5 bg-emerald-950 text-emerald-400 border border-emerald-800 rounded-lg uppercase">
+              {scheme.category}
+            </span>
+            <span className="text-xs text-slate-400 flex items-center gap-1">
+              <Building2 size={13} className="text-slate-500" />
+              {scheme.department}
+            </span>
+          </div>
+          <h2 className="text-xl font-bold text-white leading-tight">
+            {lang === 'ta' ? scheme.name_ta : scheme.name_en}
+          </h2>
+          {lang === 'ta' ? (
+            <p className="text-xs text-slate-400 font-mono">{scheme.name_en}</p>
+          ) : (
+            scheme.name_ta && <p className="text-xs text-slate-400 font-sans">{scheme.name_ta}</p>
+          )}
+        </div>
+
+        {/* Benefits & Description */}
+        <div className="p-3.5 bg-slate-900/90 rounded-xl border border-slate-800 space-y-1.5">
+          <div className="text-xs font-semibold text-amber-400 flex items-center gap-1.5">
+            <Sparkles size={14} />
+            <span>{t('benefits')}</span>
+          </div>
+          <p className="text-xs text-slate-300 leading-relaxed">
+            {lang === 'ta' ? (scheme.benefits_ta || scheme.benefits_en) : (scheme.benefits_en || scheme.benefits_ta)}
+          </p>
+          {scheme.official_url && (
+            <div className="pt-2">
+              <a
+                href={scheme.official_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 font-medium underline"
+              >
+                <span>{lang === 'ta' ? 'அதிகாரப்பூர்வ அரசு இணையதளம்' : 'Official Government Portal'}</span>
+                <ExternalLink size={12} />
+              </a>
+            </div>
+          )}
+        </div>
+
+        {/* Plain Eligibility Requirements (Information Only) */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              <ShieldCheck size={16} className="text-emerald-400" />
+              <span>{t('plain_criteria')}</span>
+            </h3>
+            <span className="text-[11px] text-slate-400">
+              {lang === 'ta' ? 'தகவலுக்கு மட்டுமே — தானியங்கி சரிபார்ப்பு இல்லை' : 'Information only — no automatic profile check'}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 text-xs">
+            <div className="p-3 bg-slate-900/70 border border-slate-800 rounded-xl">
+              <div className="text-slate-400 font-medium text-[11px] mb-0.5">{lang === 'ta' ? 'வயது வரம்பு' : 'Age Range'}</div>
+              <div className="text-white font-semibold">{ageText}</div>
+            </div>
+            <div className="p-3 bg-slate-900/70 border border-slate-800 rounded-xl">
+              <div className="text-slate-400 font-medium text-[11px] mb-0.5">{lang === 'ta' ? 'பாலினம்' : 'Gender'}</div>
+              <div className="text-white font-semibold">{genderText}</div>
+            </div>
+            <div className="p-3 bg-slate-900/70 border border-slate-800 rounded-xl">
+              <div className="text-slate-400 font-medium text-[11px] mb-0.5">{lang === 'ta' ? 'வருமான வரம்பு' : 'Income Limit'}</div>
+              <div className="text-white font-semibold">{incomeText}</div>
+            </div>
+            <div className="p-3 bg-slate-900/70 border border-slate-800 rounded-xl">
+              <div className="text-slate-400 font-medium text-[11px] mb-0.5">{lang === 'ta' ? 'சமூகப் பிரிவு' : 'Community / Social Category'}</div>
+              <div className="text-white font-semibold">{communityText}</div>
+            </div>
+            <div className="p-3 bg-slate-900/70 border border-slate-800 rounded-xl">
+              <div className="text-slate-400 font-medium text-[11px] mb-0.5">{lang === 'ta' ? 'மாவட்ட வரம்பு' : 'District Applicability'}</div>
+              <div className="text-white font-semibold">{districtText}</div>
+            </div>
+            <div className="p-3 bg-slate-900/70 border border-slate-800 rounded-xl">
+              <div className="text-slate-400 font-medium text-[11px] mb-0.5">{lang === 'ta' ? 'தொழில் / தகுதி வகை' : 'Occupation / Target Group'}</div>
+              <div className="text-white font-semibold">{occupationText}</div>
+            </div>
+          </div>
+
+          {docs.length > 0 && (
+            <div className="p-3 bg-slate-900/60 border border-slate-800 rounded-xl text-xs space-y-1.5">
+              <div className="text-slate-400 font-medium text-[11px] flex items-center gap-1.5">
+                <FileText size={13} className="text-teal-400" />
+                <span>{t('documents')}</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {docs.map((d, i) => (
+                  <span key={i} className="px-2 py-0.5 bg-slate-800 text-slate-300 rounded-md text-[11px] border border-slate-700">
+                    {d}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Triggered Inline Eligibility Check Form */}
+        {showCheckForm && (
+          <div className="p-4 bg-slate-900/90 border border-emerald-900/50 rounded-2xl space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+              <div className="font-semibold text-white text-xs flex items-center gap-2">
+                <ShieldCheck size={16} className="text-emerald-400" />
+                <span>{lang === 'ta' ? 'உங்கள் தகுதியைச் சரிபார்க்கவும் (ஒருமுறை சரிபார்ப்பு)' : 'Check Your Eligibility (One-Time Verification)'}</span>
+              </div>
+              <span className="text-[10px] text-slate-400">
+                {lang === 'ta' ? 'உள்நுழைவு தேவையில்லை' : 'No login required'}
+              </span>
+            </div>
+
+            <p className="text-[11px] text-slate-400">
+              {lang === 'ta'
+                ? 'இத்திட்டத்திற்குத் தேவையான விவரங்களை மட்டும் உள்ளிடவும். உங்கள் விவரங்கள் தானாகச் சேமிக்கப்படாது.'
+                : 'Enter only the specific fields required for this scheme. Your answers are not saved automatically.'}
+            </p>
+
+            <form onSubmit={handleVerify} className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1">
+              {hasAgeReq && (
+                <div>
+                  <label className="text-slate-400 text-[11px] block mb-1">
+                    {lang === 'ta' ? 'உங்கள் வயது' : 'Your Age'} ({rules.min_age || 0}–{rules.max_age || 100})
+                  </label>
+                  <input
+                    type="number"
+                    min="5"
+                    max="110"
+                    placeholder="e.g. 21"
+                    value={inputs.age}
+                    onChange={(e) => setInputs({ ...inputs, age: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-3 py-2 focus:outline-none focus:border-emerald-500"
+                    required
+                  />
+                </div>
+              )}
+
+              {hasGenderReq && (
+                <div>
+                  <label className="text-slate-400 text-[11px] block mb-1">
+                    {lang === 'ta' ? 'பாலினம்' : 'Gender'}
+                  </label>
+                  <select
+                    value={inputs.gender}
+                    onChange={(e) => setInputs({ ...inputs, gender: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-3 py-2 focus:outline-none focus:border-emerald-500"
+                    required
+                  >
+                    <option value="">-- {lang === 'ta' ? 'தேர்ந்தெடுக்கவும்' : 'Select'} --</option>
+                    <option value="Female">{lang === 'ta' ? 'பெண் (Female)' : 'Female'}</option>
+                    <option value="Male">{lang === 'ta' ? 'ஆண் (Male)' : 'Male'}</option>
+                    <option value="Transgender">{lang === 'ta' ? 'மூன்றாம் பாலினம் (Transgender)' : 'Transgender'}</option>
+                  </select>
+                </div>
+              )}
+
+              {hasIncomeReq && (
+                <div>
+                  <label className="text-slate-400 text-[11px] block mb-1">
+                    {lang === 'ta' ? 'ஆண்டு குடும்ப வருமானம் (₹)' : 'Annual Family Income (₹)'} (Max ₹{Number(rules.max_income).toLocaleString('en-IN')})
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 80000"
+                    value={inputs.income}
+                    onChange={(e) => setInputs({ ...inputs, income: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-3 py-2 focus:outline-none focus:border-emerald-500"
+                    required
+                  />
+                </div>
+              )}
+
+              {hasCommunityReq && (
+                <div>
+                  <label className="text-slate-400 text-[11px] block mb-1">
+                    {lang === 'ta' ? 'சமூகப் பிரிவு' : 'Community / Social Category'}
+                  </label>
+                  <select
+                    value={inputs.community_category}
+                    onChange={(e) => setInputs({ ...inputs, community_category: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-3 py-2 focus:outline-none focus:border-emerald-500"
+                    required
+                  >
+                    <option value="">-- {lang === 'ta' ? 'தேர்ந்தெடுக்கவும்' : 'Select'} --</option>
+                    <option value="General">General / OC</option>
+                    <option value="BC">BC / OBC</option>
+                    <option value="MBC">MBC / DNC</option>
+                    <option value="SC">SC</option>
+                    <option value="ST">ST</option>
+                  </select>
+                </div>
+              )}
+
+              {hasOccupationReq && (
+                <div className="sm:col-span-2">
+                  <label className="text-slate-400 text-[11px] block mb-1">
+                    {lang === 'ta' ? 'தொழில் / மாணவர் நிலை' : 'Occupation / Category Status'} ({rules.occupation})
+                  </label>
+                  <input
+                    type="text"
+                    placeholder={lang === 'ta' ? 'எ.கா: அரசுப் பள்ளி மாணவி, விவசாயி...' : 'e.g. College Student (Govt School), Farmer...'}
+                    value={inputs.occupation}
+                    onChange={(e) => setInputs({ ...inputs, occupation: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-3 py-2 focus:outline-none focus:border-emerald-500"
+                    required
+                  />
+                </div>
+              )}
+
+              <div className="sm:col-span-2 flex flex-col sm:flex-row items-center gap-2 pt-1">
+                <button
+                  type="submit"
+                  disabled={checking}
+                  className="w-full sm:flex-1 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-950/40 disabled:opacity-50"
+                >
+                  {checking ? <RefreshCw size={14} className="animate-spin" /> : <ShieldCheck size={15} />}
+                  <span>{checking ? (lang === 'ta' ? 'சரிபார்க்கிறது...' : 'Verifying...') : (lang === 'ta' ? 'எனது விவரங்களைச் சரிபார்க்க' : 'Verify My Values')}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onAskInChat(scheme)}
+                  className="w-full sm:w-auto py-2.5 px-3 bg-slate-950 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-medium flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <MessageSquare size={14} className="text-teal-400" />
+                  <span>{lang === 'ta' ? 'AI அரட்டையில் கேட்க' : 'Ask in AI Chat'}</span>
+                </button>
+              </div>
+            </form>
+
+            {/* Verification Result Display */}
+            {evalResult && (
+              <div className={`mt-3 p-3.5 rounded-xl border text-xs space-y-2 ${evalResult.eligible ? 'bg-emerald-950/50 border-emerald-700/60 text-emerald-200' : 'bg-rose-950/50 border-rose-800/60 text-rose-200'}`}>
+                <div className="flex items-center gap-2 font-bold text-sm">
+                  {evalResult.eligible ? (
+                    <>
+                      <CheckCircle2 size={18} className="text-emerald-400" />
+                      <span>{lang === 'ta' ? '✅ நீங்கள் குறிப்பிட்ட விவரங்களின்படி தகுதியுடையவர்' : '✅ You meet the requirements you provided'}</span>
+                    </>
+                  ) : (
+                    <>
+                      <AlertCircle size={18} className="text-rose-400" />
+                      <span>{lang === 'ta' ? '❌ வரம்புகள் பொருந்தவில்லை' : "❌ Doesn't match all requirements"}</span>
+                    </>
+                  )}
+                </div>
+
+                {evalResult.criteria && (
+                  <div className="space-y-1 pt-1 text-[11px]">
+                    {evalResult.criteria.map((c, i) => (
+                      <div key={i} className="flex items-start gap-1.5">
+                        <span className={c.passed ? 'text-emerald-400' : 'text-rose-400'}>
+                          {c.passed ? '✓' : '✗'}
+                        </span>
+                        <span>
+                          {c.passed
+                            ? `${c.rule}: ${lang === 'ta' ? 'பொருந்தியது' : 'Matches'}`
+                            : `${lang === 'ta' ? `${c.rule} பொருந்தவில்லை` : `Doesn't match on ${c.rule}`} (${lang === 'ta' ? 'தேவை' : 'Required'}: ${c.required}, ${lang === 'ta' ? 'வழங்கியது' : 'provided'}: ${c.user_value})`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Optional Profile Saving for Logged-In Users */}
+                {user && evalResult.eligible && (
+                  <div className="pt-2 border-t border-emerald-900/40 flex items-center justify-between flex-wrap gap-2 text-[11px]">
+                    <span className="text-slate-400">
+                      {lang === 'ta' ? 'எதிர்கால வருகைக்கு இந்த விவரங்களைச் சேமிக்கவா?' : 'Save these values to your profile for future visits?'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleSaveProfile}
+                      className="px-2.5 py-1 bg-emerald-900 hover:bg-emerald-800 text-emerald-200 border border-emerald-700 rounded-lg font-medium transition-colors"
+                    >
+                      {saveStatus || (lang === 'ta' ? 'சுயவிவரத்தில் சேமிக்க (விருப்பமானது)' : 'Save to Profile (Optional)')}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Modal Bottom Actions */}
+        <div className="pt-2 border-t border-slate-800 flex flex-col sm:flex-row items-center gap-3">
+          {!showCheckForm && (
+            <button
+              type="button"
+              onClick={() => setShowCheckForm(true)}
+              className="w-full sm:flex-1 py-2.5 px-4 bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-emerald-500 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all shadow-md"
+            >
+              <ShieldCheck size={16} className="text-emerald-400" />
+              <span>{lang === 'ta' ? "நான் தகுதியானவரா எனப் பார்க்க" : "Check If I'm Eligible"}</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={handleApplyClick}
+            className="w-full sm:flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all shadow-lg bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-950/40"
+          >
+            <CheckCircle2 size={16} />
+            <span>{t('start_app_btn')}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DemoAppModal({ isOpen, onClose, scheme, lang, t, onSubmitted }) {
   const [refId, setRefId] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setRefId('');
+    }
+  }, [isOpen]);
 
   if (!isOpen || !scheme) return null;
 
   const handleSubmit = async () => {
-    const token = localStorage.getItem('accessToken');
-    const res = await fetch('http://localhost:5000/api/applications', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ scheme_id: scheme.id })
-    });
-    const data = await res.json();
-    if (res.ok) { setRefId(data.demo_reference_id); if (onSubmitted) onSubmitted(); }
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('accessToken');
+      const res = await fetch(`${API_URL}/api/applications`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ scheme_id: scheme.id })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setRefId(data.demo_reference_id);
+        if (onSubmitted) onSubmitted(data.demo_reference_id);
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-      <div className="w-full max-w-md glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-        <h2 className="text-base font-bold text-white">Start Demo Application</h2>
-        <div className="p-3 bg-amber-950/60 border border-amber-800 rounded-xl text-amber-200 text-xs">
-          {t('demo_disclaimer')}
-        </div>
+      <div className="relative w-full max-w-md glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
+        <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-white">
+          <X size={18} />
+        </button>
+
         {refId ? (
-          <div className="text-center space-y-2">
-            <div className="text-xs font-mono text-emerald-400 font-bold bg-slate-950 p-2 rounded-lg border border-slate-800">Demo App ID: {refId}</div>
-            <button onClick={onClose} className="w-full py-2 bg-emerald-600 text-white rounded-xl text-xs font-semibold">Done</button>
+          /* CONFIRMATION MESSAGE */
+          <div className="text-center py-4 space-y-3">
+            <div className="w-12 h-12 rounded-full bg-emerald-950/80 border border-emerald-700/60 text-emerald-400 mx-auto flex items-center justify-center">
+              <Check size={24} />
+            </div>
+            <div className="text-base font-bold text-white flex items-center justify-center gap-2">
+              <span>{lang === 'ta' ? 'விண்ணப்ப எண்:' : 'Application ID:'}</span>
+              <span className="font-mono text-emerald-400">{refId}</span>
+              <span className="text-emerald-400 font-bold">✓</span>
+            </div>
+            <p className="text-xs text-slate-400">
+              {lang === 'ta' ? 'விண்ணப்ப நிலை கண்காணிப்பில் பதிவு சேர்க்கப்பட்டது.' : 'Application added to your status tracker.'}
+            </p>
+            <button
+              onClick={onClose}
+              className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold transition-colors mt-2"
+            >
+              Done
+            </button>
           </div>
         ) : (
-          <div className="flex gap-2">
-            <button onClick={onClose} className="flex-1 py-2 bg-slate-900 text-slate-300 text-xs font-semibold rounded-xl">Cancel</button>
-            <button onClick={handleSubmit} className="flex-1 py-2 bg-emerald-600 text-white text-xs font-semibold rounded-xl">Confirm Demo Submit</button>
+          /* APPLICATION SCREEN */
+          <div className="space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+              <h2 className="text-base font-bold text-white">
+                {lang === 'ta' ? 'விண்ணப்பம் சமர்ப்பிக்கவும்' : 'Submit Application'}
+              </h2>
+            </div>
+
+            <div className="p-3.5 bg-slate-900 border border-slate-800 rounded-xl space-y-1.5 text-xs">
+              <div className="text-slate-400 text-[11px]">Selected Scheme:</div>
+              <div className="text-sm font-semibold text-white">{lang === 'ta' ? scheme.name_ta : scheme.name_en}</div>
+              <div className="text-[11px] text-emerald-400 font-medium">{scheme.department}</div>
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 py-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs font-semibold rounded-xl transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={loading}
+                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-semibold rounded-xl transition-colors shadow-lg shadow-emerald-950"
+              >
+                {loading ? 'Submitting...' : (lang === 'ta' ? 'உறுதிசெய்து சமர்ப்பிக்கவும்' : 'Confirm & Submit')}
+              </button>
+            </div>
           </div>
         )}
       </div>

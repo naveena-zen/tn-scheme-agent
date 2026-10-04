@@ -113,6 +113,7 @@ async function initDb() {
       id SERIAL PRIMARY KEY,
       user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       type VARCHAR(30) NOT NULL,
+      scheme_id INT REFERENCES schemes(id) ON DELETE SET NULL,
       message_en TEXT NOT NULL,
       message_ta TEXT NOT NULL,
       is_read BOOLEAN DEFAULT FALSE,
@@ -125,6 +126,8 @@ async function initDb() {
       scraped_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  await pool.query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS scheme_id INT REFERENCES schemes(id) ON DELETE SET NULL;`).catch(() => {});
 
   const userCheck = await pool.query(`SELECT count(*) FROM users`);
   if (parseInt(userCheck.rows[0].count) === 0) {
@@ -325,25 +328,24 @@ function buildFallbackVector(text) {
   return vector.map(v => v / mag);
 }
 
-// Token overlap similarity (Jaccard-like) — used when real embeddings unavailable
+// Token overlap similarity (Jaccard-like) — Unicode and Tamil script aware
 function tokenOverlapScore(queryTokens, text) {
   const textTokens = new Set(
-    text.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(t => t.length > 2)
+    text.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(t => t.length > 1)
   );
   if (textTokens.size === 0 || queryTokens.size === 0) return 0;
   let overlap = 0;
   for (const t of queryTokens) { if (textTokens.has(t)) overlap++; }
-  // Weighted: overlap / union (Jaccard) boosted by match density
   const union = new Set([...queryTokens, ...textTokens]).size;
-  const jaccard = overlap / union;
+  const jaccard = overlap / (union || 1);
   const density = overlap / queryTokens.size;
-  return Math.min(0.95, (jaccard * 0.5 + density * 0.5));
+  return Math.min(0.95, (jaccard * 0.4 + density * 0.6));
 }
 
 async function retrieve(query, topK = 5) {
-  const cleanQ = query.toLowerCase().replace(/[^a-z0-9 ]/g, ' ');
-  const STOPWORDS = new Set(['the','a','an','is','are','of','in','to','for','and','or','what','how','can','i','my','me','do','does','get','be','will','with','at','by','from','as','that','this','has','have']);
-  const queryTokens = new Set(cleanQ.split(/\s+/).filter(t => t.length > 2 && !STOPWORDS.has(t)));
+  const cleanQ = query.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ');
+  const STOPWORDS = new Set(['the','a','an','is','are','of','in','to','for','and','or','what','how','can','i','my','me','do','does','get','be','will','with','at','by','from','as','that','this','has','have','about','any','all','tell','please','திட்டம்','திட்டங்கள்','என்ன','எப்படி']);
+  const queryTokens = new Set(cleanQ.split(/\s+/).filter(t => t.length > 1 && !STOPWORDS.has(t)));
   const queryArray = [...queryTokens];
 
   let rows = [];
@@ -371,25 +373,30 @@ async function retrieve(query, topK = 5) {
     }
   } catch (e) { /* FTS not available, fall through */ }
 
-  // ─── LAYER 2: ILIKE Keyword Matching (always runs as complement) ──────────
+  // ─── LAYER 2: ILIKE Keyword Matching (supports Tamil & English keywords) ─
   const likeResults = new Map();
-  for (const token of queryArray) {
+  const searchCandidates = query.length < 60 && query.trim().length > 2 ? [query.trim(), ...queryArray] : queryArray;
+
+  for (const token of searchCandidates) {
+    if (!token || token.length < 2) continue;
     const kRes = await pool.query(`
       SELECT DISTINCT ON (s.id)
-        c.id, c.scheme_id, c.chunk_text, s.name_en, s.name_ta, s.category
+        c.id, c.scheme_id, c.chunk_text, s.name_en, s.name_ta, s.category, s.department
       FROM scheme_chunks c JOIN schemes s ON c.scheme_id = s.id
       WHERE LOWER(s.name_en) LIKE $1 OR LOWER(s.name_ta) LIKE $1
-         OR LOWER(s.category) LIKE $1 OR LOWER(c.chunk_text) LIKE $1
+         OR LOWER(s.category) LIKE $1 OR LOWER(s.department) LIKE $1
+         OR LOWER(c.chunk_text) LIKE $1
       ORDER BY s.id
       LIMIT $2
-    `, [`%${token}%`, topK]).catch(() => ({ rows: [] }));
+    `, [`%${token.toLowerCase()}%`, topK * 2]).catch(() => ({ rows: [] }));
 
     for (const r of kRes.rows) {
       const key = r.scheme_id;
-      const overlap = tokenOverlapScore(queryTokens, r.chunk_text + ' ' + r.name_en + ' ' + r.category);
+      const overlap = tokenOverlapScore(queryTokens, r.chunk_text + ' ' + r.name_en + ' ' + r.name_ta + ' ' + r.category + ' ' + (r.department || ''));
+      const score = Math.min(0.95, Math.max(overlap + 0.25, 0.45));
       const existing = likeResults.get(key);
-      if (!existing || overlap > existing.similarity_score) {
-        likeResults.set(key, { ...r, similarity_score: Math.min(0.95, overlap + 0.15), retrieval_method: 'keyword' });
+      if (!existing || score > existing.similarity_score) {
+        likeResults.set(key, { ...r, similarity_score: score, retrieval_method: 'keyword' });
       }
     }
   }
@@ -546,7 +553,98 @@ async function toolGetApplicationStatus({ application_id }) {
   };
 }
 
-async function evaluateNotificationTargets(schemeData) {
+async function evaluateNotificationTargets(schemeData, context = { type: 'scraper' }) {
+  if (!schemeData) return [];
+  const ctx = typeof context === 'string' ? { type: context } : (context || { type: 'scraper' });
+
+  // ─── CONTEXT A: Triggered by user search in chatbot ─────────────────────────
+  if (ctx.type === 'user_search') {
+    const isTa = ctx.language === 'ta';
+    let relevantUpdates = [];
+    let relevantNotification = null;
+
+    // a) Check existing "new_scheme" or "status_change" notifications where scheme_id matches the one discussed
+    if (schemeData.id) {
+      try {
+        const notifQ = ctx.user_id
+          ? `SELECT * FROM notifications WHERE scheme_id = $1 AND (user_id = $2 OR user_id IS NULL) ORDER BY created_at DESC LIMIT 1`
+          : `SELECT * FROM notifications WHERE scheme_id = $1 ORDER BY created_at DESC LIMIT 1`;
+        const notifParams = ctx.user_id ? [schemeData.id, ctx.user_id] : [schemeData.id];
+        const nRes = await pool.query(notifQ, notifParams);
+        if (nRes.rows.length > 0) {
+          relevantNotification = nRes.rows[0];
+        }
+      } catch (e) {
+        console.warn('[Notification Agent] Error checking existing notifications:', e.message);
+      }
+    }
+
+    // b) Check other schemes in the same category recently added or updated
+    let relatedCategorySchemes = [];
+    if (schemeData.category) {
+      try {
+        const catRes = await pool.query(`
+          SELECT id, name_en, name_ta, category, department, last_verified_at, status
+          FROM schemes
+          WHERE category = $1
+            AND id != $2
+            AND status = 'live'
+            AND (last_verified_at >= NOW() - INTERVAL '30 days' OR last_verified_at IS NOT NULL)
+          ORDER BY last_verified_at DESC
+          LIMIT 2
+        `, [schemeData.category, schemeData.id || 0]);
+        relatedCategorySchemes = catRes.rows;
+      } catch (e) {
+        console.warn('[Notification Agent] Error checking related category schemes:', e.message);
+      }
+    }
+
+    let updateText = '';
+    if (relevantNotification) {
+      updateText = isTa
+        ? `📌 **தொடர்புடைய புதுப்பிப்பு:** ${relevantNotification.message_ta}`
+        : `📌 **Related update:** ${relevantNotification.message_en}`;
+      relevantUpdates.push({ type: 'existing_notification', text: updateText });
+    } else if (relatedCategorySchemes.length > 0) {
+      const rel = relatedCategorySchemes[0];
+      updateText = isTa
+        ? `📌 **தொடர்புடைய புதுப்பிப்பு:** இப்பிரிவில் அண்மையில் சரிபார்க்கப்பட்ட மற்றொரு திட்டம் — **${rel.name_ta}** (${rel.department}).`
+        : `📌 **Related update:** A recently verified scheme in this category is also active — **${rel.name_en}** (${rel.department}).`;
+      relevantUpdates.push({ type: 'related_scheme', scheme: rel, text: updateText });
+
+      // Populate main notifications panel for this scheme-driven match if user is authenticated
+      if (ctx.user_id) {
+        try {
+          const checkExist = await pool.query(
+            `SELECT 1 FROM notifications WHERE user_id = $1 AND scheme_id = $2 AND type = 'new_scheme'`,
+            [ctx.user_id, rel.id]
+          );
+          if (checkExist.rows.length === 0) {
+            await pool.query(`
+              INSERT INTO notifications (user_id, type, scheme_id, message_en, message_ta)
+              VALUES ($1, 'new_scheme', $2, $3, $4)
+            `, [
+              ctx.user_id,
+              rel.id,
+              `Related Scheme in ${rel.category}: '${rel.name_en}' is active and accepting applications.`,
+              `${rel.category} பிரிவில் தொடர்புடைய திட்டம்: '${rel.name_ta}' தற்போது நடைமுறையில் உள்ளது.`
+            ]);
+          }
+        } catch (e) {
+          console.warn('[Notification Agent] Error populating panel notification:', e.message);
+        }
+      }
+    }
+
+    return {
+      triggered_by: 'user_search',
+      has_update: relevantUpdates.length > 0,
+      update_text: updateText,
+      related_updates: relevantUpdates
+    };
+  }
+
+  // ─── CONTEXT B: Scraper / Admin / Default Target Evaluation ──────────────────
   const usersRes = await pool.query(`SELECT id, name, age, income, community_category, gender, district, occupation, preferred_language FROM users WHERE role = 'user'`);
   const targets = [];
   for (const u of usersRes.rows) {
@@ -555,98 +653,516 @@ async function evaluateNotificationTargets(schemeData) {
     const incomeOk = !rules.max_income || Number(u.income) <= Number(rules.max_income);
     if (genderOk && incomeOk) {
       targets.push({ user_id: u.id, user_name: u.name, reason: `Matches profile (${u.gender}, income ₹${u.income}).`, relevant: true });
+      try {
+        await pool.query(`
+          INSERT INTO notifications (user_id, type, scheme_id, message_en, message_ta)
+          VALUES ($1, 'new_scheme', $2, $3, $4)
+        `, [
+          u.id,
+          schemeData.id || null,
+          `New Scheme Available: ${schemeData.name_en} (${schemeData.department})`,
+          `புதிய திட்டம் அறிமுகம்: ${schemeData.name_ta} (${schemeData.department})`
+        ]);
+      } catch (e) {}
     }
   }
   return targets;
 }
 
-// Orchestrator Agent Function Calling Loop
-async function runOrchestrator({ message, language = 'en', user_id }) {
-  const trace = [];
-  let userProfile = { age: 21, income: 80000, gender: 'Female', community_category: 'MBC', district: 'Salem', occupation: 'Student' };
+// Helper to detect if user is explicitly asking about personal eligibility
+function hasPersonalEligibilityIntent(text) {
+  if (!text) return false;
+  const lower = text.toLowerCase();
+  const personalPatterns = [
+    /\bam i (eligible|qualified)\b/i,
+    /\bdo i (qualify|meet the (criteria|requirements))\b/i,
+    /\bcan i (apply|get|avail|receive)\b/i,
+    /\bam i able to (apply|get|receive)\b/i,
+    /\bcheck (my|if i am|whether i am) eligible\b/i,
+    /\bcheck (my )?eligibility\b/i,
+    /\bwould i (qualify|be eligible)\b/i,
+    /\bmy eligibility\b/i,
+    /\bwill i get\b/i,
+    /\bis this (scheme )?eligible for me\b/i,
+    /\beligible for me\b/i,
+    /நான் தகுதியானவரா/u,
+    /எனக்கு தகுதி/u,
+    /நான் விண்ணப்பிக்கலாமா/u,
+    /என்னால் விண்ணப்பிக்க முடியுமா/u,
+    /எனக்கு கிடைக்குமா/u,
+    /என் தகுதி/u,
+    /தகுதி உண்டா/u
+  ];
+  return personalPatterns.some(p => p.test(lower));
+}
 
-  if (user_id) {
-    const uRes = await pool.query(`SELECT age, income, gender, community_category, district, occupation FROM users WHERE id = $1`, [user_id]);
-    if (uRes.rows.length > 0) userProfile = { ...uRes.rows[0], age: Number(uRes.rows[0].age), income: Number(uRes.rows[0].income) };
+function wasAskedForEligibility(history = []) {
+  if (!history || history.length === 0) return false;
+  for (let i = history.length - 1; i >= 0; i--) {
+    const msg = history[i];
+    if (msg.sender === 'agent' || msg.role === 'assistant') {
+      const text = msg.text || msg.content || '';
+      if (text.includes("I need:") || text.includes("To check if you are eligible") || text.includes("To check your eligibility") || text.includes("எனக்கு கீழ்க்கண்ட விவரங்கள் தேவை") || text.includes("தகுதியைச் சரிபார்க்க")) {
+        return true;
+      }
+      break;
+    }
+  }
+  return false;
+}
+
+function getRequiredFieldsForScheme(scheme) {
+  if (!scheme || !scheme.eligibility_rules) return [];
+  const rules = typeof scheme.eligibility_rules === 'string'
+    ? JSON.parse(scheme.eligibility_rules)
+    : scheme.eligibility_rules;
+  const fields = [];
+
+  if (rules.min_age !== undefined || rules.max_age !== undefined) {
+    const min = rules.min_age || 0;
+    const max = rules.max_age || 100;
+    fields.push({
+      key: 'age',
+      label_en: 'Age',
+      label_ta: 'வயது',
+      description_en: `${min}–${max} years`,
+      description_ta: `${min}–${max} வயது`,
+      validate: (val) => {
+        const n = Number(val);
+        return !isNaN(n) && n >= min && n <= max;
+      },
+      formatRequirement_en: `${min}–${max} years`,
+      formatRequirement_ta: `${min}–${max} வயது`
+    });
   }
 
+  if (rules.gender && rules.gender.toLowerCase() !== 'any' && rules.gender.toLowerCase() !== 'all') {
+    fields.push({
+      key: 'gender',
+      label_en: 'Gender',
+      label_ta: 'பாலினம்',
+      description_en: rules.gender,
+      description_ta: rules.gender === 'Female' ? 'பெண்கள் மட்டும்' : rules.gender,
+      validate: (val) => (val || '').toLowerCase() === rules.gender.toLowerCase(),
+      formatRequirement_en: rules.gender,
+      formatRequirement_ta: rules.gender === 'Female' ? 'பெண்' : rules.gender
+    });
+  }
+
+  if (rules.max_income !== undefined && Number(rules.max_income) > 0) {
+    const max = Number(rules.max_income);
+    fields.push({
+      key: 'income',
+      label_en: 'Annual Family Income',
+      label_ta: 'ஆண்டு குடும்ப வருமானம்',
+      description_en: `Up to ₹${max.toLocaleString('en-IN')}/year`,
+      description_ta: `அதிகபட்சம் ₹${max.toLocaleString('en-IN')}/ஆண்டு`,
+      validate: (val) => {
+        const n = Number(val);
+        return !isNaN(n) && n <= max;
+      },
+      formatRequirement_en: `≤ ₹${max.toLocaleString('en-IN')}`,
+      formatRequirement_ta: `≤ ₹${max.toLocaleString('en-IN')}`
+    });
+  }
+
+  if (rules.community_category && !['any', 'all'].includes(String(rules.community_category).toLowerCase())) {
+    const allowed = Array.isArray(rules.community_category)
+      ? rules.community_category.map(c => c.toLowerCase())
+      : [String(rules.community_category).toLowerCase()];
+    fields.push({
+      key: 'community_category',
+      label_en: 'Community Category',
+      label_ta: 'சமூகப் பிரிவு',
+      description_en: Array.isArray(rules.community_category) ? rules.community_category.join(', ') : rules.community_category,
+      description_ta: Array.isArray(rules.community_category) ? rules.community_category.join(', ') : rules.community_category,
+      validate: (val) => allowed.some(a => a.includes((val || '').toLowerCase()) || (val || '').toLowerCase().includes(a)),
+      formatRequirement_en: Array.isArray(rules.community_category) ? rules.community_category.join(', ') : rules.community_category,
+      formatRequirement_ta: Array.isArray(rules.community_category) ? rules.community_category.join(', ') : rules.community_category
+    });
+  }
+
+  if (rules.occupation && !['any', 'all'].includes(String(rules.occupation).toLowerCase())) {
+    fields.push({
+      key: 'occupation',
+      label_en: 'Target Group / Status',
+      label_ta: 'தகுதி நிலை / தொழில்',
+      description_en: rules.occupation,
+      description_ta: rules.occupation,
+      validate: (val) => {
+        if (!val) return false;
+        const lowerVal = String(val).toLowerCase();
+        return rules.occupation.toLowerCase().split(/[\s,/]+/).some(k => k.length > 3 && lowerVal.includes(k)) || lowerVal.length > 2;
+      },
+      formatRequirement_en: rules.occupation,
+      formatRequirement_ta: rules.occupation
+    });
+  }
+
+  if (rules.district && !['all', 'all tamil nadu'].includes(String(rules.district).toLowerCase())) {
+    fields.push({
+      key: 'district',
+      label_en: 'District',
+      label_ta: 'மாவட்டம்',
+      description_en: rules.district,
+      description_ta: rules.district,
+      validate: (val) => !val || rules.district.toLowerCase().includes(String(val).toLowerCase()),
+      formatRequirement_en: rules.district,
+      formatRequirement_ta: rules.district
+    });
+  }
+
+  return fields;
+}
+
+function extractCitizenAttributes(text) {
+  if (!text) return {};
+  const attrs = {};
+  const lower = text.toLowerCase();
+
+  // Age extraction
+  const ageMatch = text.match(/\b(\d{1,2})\s*[- ]?(?:years?|yrs?)[- ]?old\b/i) ||
+                   text.match(/(?:age|aged|வயது|வயதுடைய)[:\s]*(\d{1,2})\b/i) ||
+                   text.match(/\b(\d{1,2})\s*(?:years?\b|வயது\b|yrs?\b)/i) ||
+                   text.match(/(?:i am|நான்)\s+(\d{1,2})\b/i);
+  if (ageMatch) {
+    const a = parseInt(ageMatch[1], 10);
+    if (a >= 5 && a <= 110) attrs.age = a;
+  } else {
+    const standaloneNum = text.trim().match(/^(\d{1,2})$/);
+    if (standaloneNum) {
+      const a = parseInt(standaloneNum[1], 10);
+      if (a >= 5 && a <= 110) attrs.age = a;
+    }
+  }
+
+  // Gender extraction
+  if (/\b(female|woman|girl|women|பெண்|பெண்கள்|மகள்|மாணவி)\b/i.test(lower)) {
+    attrs.gender = 'Female';
+  } else if (/\b(male|man|boy|men|ஆண்|ஆண்கள்|மகன்|மாணவர்)\b/i.test(lower)) {
+    attrs.gender = 'Male';
+  } else if (/\b(transgender|trans|திருநங்கை|திருநம்பி)\b/i.test(lower)) {
+    attrs.gender = 'Transgender';
+  }
+
+  // Income extraction
+  const incMatch = text.match(/(?:income|வருமானம்|வருமானம்\s*₹|salary|₹|rs\.?|inr)[:\s]*(\d+(?:,\d+)*(?:\.\d+)?)\s*(lakh|lakhs|k)?/i) ||
+                   text.match(/(\d+(?:,\d+)*(?:\.\d+)?)\s*(lakh|lakhs)\b/i) ||
+                   text.match(/(\d{4,8})\s*(?:\/year|per year|ஆண்டு|வருடம்)?\b/i);
+  if (incMatch) {
+    let raw = incMatch[1].replace(/,/g, '');
+    let val = parseFloat(raw);
+    const unit = incMatch[2] ? incMatch[2].toLowerCase() : '';
+    if (unit.startsWith('lakh')) val = val * 100000;
+    else if (unit === 'k') val = val * 1000;
+    if (val > 1000 && val <= 50000000) attrs.income = val;
+  }
+
+  // Community extraction
+  if (/\b(sc|st|mbc|bc|obc|general|oc)\b/i.test(lower) || /பட்டியலின|பழங்குடி|பிற்படுத்தப்பட்ட/u.test(lower)) {
+    const cMatch = lower.match(/\b(sc|st|mbc|bc|obc|general|oc)\b/i);
+    if (cMatch) attrs.community_category = cMatch[1].toUpperCase();
+    else if (/பட்டியலின/u.test(lower)) attrs.community_category = 'SC';
+    else if (/பழங்குடி/u.test(lower)) attrs.community_category = 'ST';
+    else if (/மிகவும் பிற்படுத்தப்பட்ட/u.test(lower)) attrs.community_category = 'MBC';
+    else if (/பிற்படுத்தப்பட்ட/u.test(lower)) attrs.community_category = 'BC';
+  }
+
+  // Occupation / Education / Status keywords
+  if (/\b(student|college|undergraduate|degree|diploma|school|கல்லூரி|பள்ளி|மாணவி|மாணவர்)\b/i.test(lower)) {
+    attrs.occupation = 'Student';
+  } else if (/\b(farmer|agriculture|cultivator|விவசாயி|விவசாய)\b/i.test(lower)) {
+    attrs.occupation = 'Farmer';
+  } else if (/\b(widow|destitute|விதவை|கைம்பெண்)\b/i.test(lower)) {
+    attrs.occupation = 'Destitute Widow';
+  } else if (/\b(differently abled|disabled|handicapped|மாற்றுத்திறனாளி)\b/i.test(lower)) {
+    attrs.occupation = 'Differently Abled';
+  } else if (/\b(unemployed|job seeker|வேலையற்ற)\b/i.test(lower)) {
+    attrs.occupation = 'Unemployed Youth';
+  } else if (/\b(entrepreneur|business|msme|தொழில்)\b/i.test(lower)) {
+    attrs.occupation = 'Entrepreneur';
+  }
+
+  // District extraction
+  const districts = ['chennai', 'salem', 'coimbatore', 'madurai', 'trichy', 'tiruchirappalli', 'thanjavur', 'tirunelveli', 'erode', 'vellore', 'kancheepuram', 'chengalpattu', 'dharmapuri', 'dindigul', 'cuddalore', 'villupuram', 'kallakurichi', 'ranipet', 'tirupathur', 'tiruppur', 'namakkal', 'karur', 'ariyalur', 'perambalur', 'pudukkottai', 'sivaganga', 'ramanathapuram', 'virudhunagar', 'theni', 'tenkasi', 'thoothukudi', 'kanniyakumari', 'nilgiris', 'krishnagiri', 'tiruvannamalai', 'tiruvallur', 'nagapattinam', 'mayiladuthurai', 'tiruvarur'];
+  for (const d of districts) {
+    if (lower.includes(d)) {
+      attrs.district = d.charAt(0).toUpperCase() + d.slice(1);
+      break;
+    }
+  }
+
+  return attrs;
+}
+
+// Orchestrator Agent Function Calling Loop: Requirements-First by Default
+async function runOrchestrator({ message, language = 'en', user_id, history = [] }) {
+  const trace = [];
   const lowerMsg = message.toLowerCase();
   const isTa = language === 'ta' || lowerMsg.includes('தமிழ்') || /[\u0B80-\u0BFF]/.test(message);
 
-  if (lowerMsg.includes('demo-app') || lowerMsg.includes('status') || lowerMsg.includes('நிலை')) {
-    const appIdMatch = message.match(/DEMO-APP-\d+/i) || message.match(/\d+/);
-    const targetId = appIdMatch ? appIdMatch[0] : 'DEMO-APP-1001';
-    const trackRes = await toolGetApplicationStatus({ application_id: targetId });
-    trace.push({ tool: 'get_application_status', input: { application_id: targetId }, output: trackRes });
-
-    const answer = isTa
-      ? `விண்ணப்பம் ${trackRes.demo_reference_id} (${trackRes.scheme_name_ta}) நிலை: ${trackRes.current_status}.\n${trackRes.summary_ta}`
-      : `Application ${trackRes.demo_reference_id} for ${trackRes.scheme_name_en} is at stage: ${trackRes.current_status}.\n${trackRes.summary_en}`;
-    return { answer, trace };
+  // Application Tracking Check (if tracking code present)
+  let appStatusResult = null;
+  const appIdMatch = message.match(/(?:DEMO-APP-|APP-)?(\d{4,})/i) || message.match(/DEMO-APP-\d+/i);
+  if (appIdMatch && (lowerMsg.includes('status') || lowerMsg.includes('track') || lowerMsg.includes('நிலை') || lowerMsg.includes('விண்ணப்ப'))) {
+    const targetId = appIdMatch[0].startsWith('DEMO-APP-') ? appIdMatch[0] : (appIdMatch[0].startsWith('APP-') ? appIdMatch[0] : `DEMO-APP-${appIdMatch[1]}`);
+    appStatusResult = await toolGetApplicationStatus({ application_id: targetId });
+    trace.push({ tool: 'get_application_status', input: { application_id: targetId }, output: appStatusResult });
   }
 
+  // 1. Search schemes tool
   const searchRes = await toolSearchSchemes({ query: message });
   trace.push({ tool: 'search_schemes', input: { query: message }, output: searchRes });
 
-  // ENFORCE SIMILARITY SCORE THRESHOLD (0.25 for keyword/overlap scoring)
-  if (searchRes.below_threshold || !searchRes.chunks || searchRes.chunks.length === 0) {
-    // Show TOP candidates from search results (not a static list) so user has something to react to
-    const topCandidates = searchRes.chunks && searchRes.chunks.length > 0
-      ? searchRes.chunks.slice(0, 3)
-      : [];
+  const retrievedChunks = searchRes.chunks || [];
+  let primarySchemeId = retrievedChunks.length > 0 ? retrievedChunks[0].scheme_id : null;
+  let primaryScheme = null;
 
-    let candidatesEnLines = '';
-    let candidatesTaLines = '';
-    if (topCandidates.length > 0) {
-      candidatesEnLines = `\n\n**Closest matches found (low confidence — please confirm):**\n` +
-        topCandidates.map((c, i) => `${i+1}. **${c.name_en}** (similarity: ${(c.similarity_score * 100).toFixed(0)}%)`).join('\n');
-      candidatesTaLines = `\n\n**மிக நெருக்கமான பொருத்தங்கள் (குறைந்த நம்பகத்தன்மை — உறுதிப்படுத்தவும்):**\n` +
-        topCandidates.map((c, i) => `${i+1}. **${c.name_ta}** (பொருத்தம்: ${(c.similarity_score * 100).toFixed(0)}%)`).join('\n');
+  if (primarySchemeId) {
+    const sRes = await pool.query(`SELECT * FROM schemes WHERE id = $1`, [primarySchemeId]);
+    if (sRes.rows.length > 0) primaryScheme = sRes.rows[0];
+  }
+
+  // If scheme not found in current message, look back in recent history
+  if (!primaryScheme && history && history.length > 0) {
+    for (let i = history.length - 1; i >= 0; i--) {
+      const histText = history[i].text || history[i].content || '';
+      const histSearch = await toolSearchSchemes({ query: histText });
+      if (histSearch.chunks && histSearch.chunks.length > 0) {
+        primarySchemeId = histSearch.chunks[0].scheme_id;
+        const sRes = await pool.query(`SELECT * FROM schemes WHERE id = $1`, [primarySchemeId]);
+        if (sRes.rows.length > 0) {
+          primaryScheme = sRes.rows[0];
+          break;
+        }
+      }
+    }
+  }
+
+  // Check if citizen is EXPLICITLY asking for personal eligibility
+  const isPersonalElig = hasPersonalEligibilityIntent(message) || wasAskedForEligibility(history);
+
+  // ==========================================================================
+  // CASE A: TRIGGERED PERSONAL ELIGIBILITY CHECK
+  // ==========================================================================
+  if (isPersonalElig && primaryScheme) {
+    const requiredFields = getRequiredFieldsForScheme(primaryScheme);
+    const combinedText = [
+      ...history.map(m => m.text || m.content || ''),
+      message
+    ].join(' ');
+    const provided = extractCitizenAttributes(combinedText);
+
+    // Identify missing fields required by this scheme
+    const missing = requiredFields.filter(rf => provided[rf.key] === undefined || provided[rf.key] === null);
+
+    if (missing.length > 0) {
+      // Prompt user inline ONLY for missing fields
+      trace.push({ tool: 'request_eligibility_inputs', input: { scheme: primaryScheme.name_en, missing: missing.map(m => m.key) } });
+      const answer = isTa
+        ? `**${primaryScheme.name_ta}** திட்டத்திற்கான உங்கள் தகுதியைச் சரிபார்க்க, எனக்கு கீழ்க்கண்ட விவரங்கள் தேவை:\n\n` +
+          missing.map(m => `• **${m.label_ta}** (${m.description_ta})`).join('\n') +
+          `\n\nதயவுசெய்து உங்கள் விவரங்களைக் குறிப்பிடவும்.`
+        : `To check if you are eligible for **${primaryScheme.name_en}**, I need:\n\n` +
+          missing.map(m => `• **${m.label_en}** (${m.description_en})`).join('\n') +
+          `\n\nWhat are your details?`;
+      return { answer, trace };
     }
 
-    const answer = isTa
-      ? `⚠️ **குறைந்த நம்பகத்தன்மை:** உங்கள் கேள்விக்கு தொடர்பான திட்டத்தை நேரடியாகக் கண்டறிய முடியவில்லை.` +
-        candidatesTaLines +
-        `\n\nதயவுசெய்து திட்டத்தின் சரியான பெயரை உறுதிப்படுத்தவும் அல்லது தெளிவுபடுத்தவும்.`
-      : `⚠️ **Low Confidence Match:** I could not find a high-confidence match for your query in the verified Tamil Nadu scheme database.` +
-        candidatesEnLines +
-        `\n\nPlease confirm or clarify the scheme name, or try rephrasing (e.g. include the Tamil name or department name).`;
+    // All required fields provided! Evaluate pass/fail against strictly provided values
+    const mismatches = [];
+    for (const rf of requiredFields) {
+      const ok = rf.validate(provided[rf.key]);
+      if (!ok) {
+        mismatches.push({
+          field_en: rf.label_en,
+          field_ta: rf.label_ta,
+          required_en: rf.formatRequirement_en,
+          required_ta: rf.formatRequirement_ta,
+          provided: provided[rf.key]
+        });
+      }
+    }
+
+    const isEligible = mismatches.length === 0;
+    trace.push({
+      tool: 'check_eligibility',
+      input: { scheme: primaryScheme.name_en, provided_values: provided },
+      output: { eligible: isEligible, mismatches }
+    });
+
+    let answer = "";
+    if (isEligible) {
+      answer = isTa
+        ? `✅ **நீங்கள் குறிப்பிட்ட விவரங்களின்படி ${primaryScheme.name_ta} திட்டத் தகுதிகளைப் பூர்த்தி செய்கிறீர்கள்.**\n\n*(ஒருமுறை உரையாடல் சரிபார்ப்பு மட்டுமே. உங்கள் சுயவிவரத்தில் எதுவும் சேமிக்கப்படவில்லை.)*`
+        : `✅ **You meet the requirements you provided** for **${primaryScheme.name_en}**.\n\n*(One-time in-conversation check. No data has been saved to your profile.)*`;
+    } else {
+      const failListEn = mismatches.map(m => `❌ **Doesn't match on ${m.field_en}** (Required: ${m.required_en}, you provided: ${m.provided})`).join('\n');
+      const failListTa = mismatches.map(m => `❌ **${m.field_ta} பொருந்தவில்லை** (தேவை: ${m.required_ta}, நீங்கள் குறிப்பிட்டது: ${m.provided})`).join('\n');
+      answer = isTa
+        ? `${failListTa} — **${primaryScheme.name_ta}**.\n\n*(ஒருமுறை உரையாடல் சரிபார்ப்பு மட்டுமே. உங்கள் சுயவிவரத்தில் எதுவும் சேமிக்கப்படவில்லை.)*`
+        : `${failListEn} for **${primaryScheme.name_en}**.\n\n*(One-time in-conversation check. No data has been saved to your profile.)*`;
+    }
+
+    // Check for context-aware notifications tied to chatbot scheme search
+    try {
+      const notifRes = await evaluateNotificationTargets(primaryScheme, {
+        type: 'user_search',
+        user_id,
+        language: isTa ? 'ta' : 'en'
+      });
+      if (notifRes && notifRes.has_update && notifRes.update_text) {
+        trace.push({
+          tool: 'notification_agent',
+          input: { context: 'user_search', scheme_id: primaryScheme.id, scheme_name: primaryScheme.name_en },
+          output: { relevant: true, update: notifRes.update_text }
+        });
+        answer += `\n\n${notifRes.update_text}`;
+      }
+    } catch (e) {
+      console.warn('[Notification Agent Eligibility Context Error]', e.message);
+    }
 
     return { answer, trace };
   }
 
-  const matchedId = searchRes.chunks[0].scheme_id;
+  // ==========================================================================
+  // CASE B: DEFAULT BEHAVIOR — PLAIN REQUIREMENTS AS INFORMATION ONLY
+  // (NO pass/fail, NO individual comparison, NO questions back to user)
+  // ==========================================================================
+  let docRes = null;
+  let procRes = null;
+  if (primarySchemeId) {
+    docRes = await toolGetRequiredDocuments({ scheme_id: primarySchemeId });
+    trace.push({ tool: 'get_required_documents', input: { scheme_id: primarySchemeId }, output: docRes });
 
-  const eligRes = await toolCheckEligibility({ scheme_id: matchedId, user_profile: userProfile });
-  trace.push({ tool: 'check_eligibility', input: { scheme_id: matchedId, user_profile: userProfile }, output: eligRes });
+    procRes = await toolGetApplicationProcess({ scheme_id: primarySchemeId });
+    trace.push({ tool: 'get_application_process', input: { scheme_id: primarySchemeId }, output: procRes });
+  }
 
-  const docRes = await toolGetRequiredDocuments({ scheme_id: matchedId });
-  trace.push({ tool: 'get_required_documents', input: { scheme_id: matchedId }, output: docRes });
-
-  const procRes = await toolGetApplicationProcess({ scheme_id: matchedId });
-  trace.push({ tool: 'get_application_process', input: { scheme_id: matchedId }, output: procRes });
+  const schemeIds = [...new Set(retrievedChunks.slice(0, 3).map(c => c.scheme_id))];
+  let detailedSchemes = [];
+  if (schemeIds.length > 0) {
+    const dRes = await pool.query(`
+      SELECT id, name_en, name_ta, department, category, eligibility_rules, benefits_en, benefits_ta, documents_required, application_process_en, application_process_ta, official_link
+      FROM schemes WHERE id = ANY($1)
+    `, [schemeIds]);
+    detailedSchemes = dRes.rows;
+  }
 
   let answer = "";
-  if (isTa) {
-    answer = `**${eligRes.scheme_name_ta}** விவரங்கள்:\n\n` +
-      `**தகுதி நிலை:** ${eligRes.eligible ? 'நீங்கள் இத்திட்டத்திற்குத் தகுதியானவர்!' : 'நீங்கள் சில தகுதிகளைப் பெறவில்லை.'}\n` +
-      `**சரிபார்க்கப்பட்ட தகுதிகள்:**\n` +
-      eligRes.criteria.map(c => `- ${c.rule}: ${c.passed ? '✅ சான்றளிக்கப்பட்டது' : '❌ பெறப்படவில்லை'} (${c.reason})`).join('\n') +
-      `\n\n**தேவையான சான்றிதழ்கள்:**\n` +
-      (Array.isArray(docRes.documents_required) ? docRes.documents_required.map(d => `- ${d}`).join('\n') : docRes.documents_required) +
-      `\n\n**படிப்படியான விண்ணப்ப நடைமுறை:**\n` +
-      `${procRes.application_process_ta}\n\n` +
-      `🔗 **அதிகாரப்பூர்வ விண்ணப்ப இணைப்பு:** [${procRes.official_link}](${procRes.official_link})`;
-  } else {
-    answer = `**${eligRes.scheme_name_en}** Overview:\n\n` +
-      `**Eligibility Status:** ${eligRes.eligible ? 'You ARE ELIGIBLE for this scheme!' : 'You do not meet all criteria.'}\n` +
-      `**Evaluated Criteria:**\n` +
-      eligRes.criteria.map(c => `- ${c.rule}: ${c.passed ? '✅ PASSED' : '❌ FAILED'} (${c.reason})`).join('\n') +
-      `\n\n**Required Documents:**\n` +
-      (Array.isArray(docRes.documents_required) ? docRes.documents_required.map(d => `- ${d}`).join('\n') : docRes.documents_required) +
-      `\n\n**Step-by-Step Application Procedure:**\n` +
-      `${procRes.application_process_en}\n\n` +
-      `🔗 **Official Application Link:** [${procRes.official_link}](${procRes.official_link})`;
+  if (genAI) {
+    try {
+      const geminiModel = genAI.getGenerativeModel({ model: "gemini-3.8-flash" });
+      const prompt = `You are the official Tamil Nadu Autonomous Citizen Service Assistant AI.
+Provide an accurate, courteous, and objective response to the citizen's query based STRICTLY on the retrieved Tamil Nadu government schemes ground truth provided below.
+
+DEFAULT MODE RULES (MANDATORY):
+1. The citizen is asking for general information about schemes.
+2. Present the scheme's plain eligibility criteria strictly as factual, objective requirements (e.g. "Age: 18–35, Gender: Female, Income limit: ₹2,50,000/year, Target: College students from Govt schools").
+3. ABSOLUTELY DO NOT state whether the citizen is eligible or not. NEVER say "You are eligible" or "You are not eligible".
+4. DO NOT compare against any individual person, demographic, or saved profile.
+5. DO NOT ask the citizen any questions back.
+6. Whenever an official portal link exists, ALWAYS format it as a markdown hyperlink: [Portal Name](URL).
+7. Respond in the requested language: ${isTa ? 'Tamil (தமிழ்)' : 'English'}.
+8. Use clean Markdown headers, bullet points, and bold text for readability.
+
+CITIZEN QUESTION:
+"${message}"
+
+RETRIEVED SCHEMES GROUND TRUTH:
+${JSON.stringify(detailedSchemes, null, 2)}
+
+REQUIRED DOCUMENTS:
+${docRes ? JSON.stringify(docRes, null, 2) : "N/A"}
+
+APPLICATION PROCESS:
+${procRes ? JSON.stringify(procRes, null, 2) : "N/A"}
+
+APPLICATION TRACKING (IF APPLICABLE):
+${appStatusResult ? JSON.stringify(appStatusResult, null, 2) : "N/A"}
+
+Answer:`;
+
+      const genRes = await geminiModel.generateContent(prompt);
+      answer = genRes.response.text();
+    } catch (geminiError) {
+      console.warn("[Gemini Generation Error, falling back to structured RAG]", geminiError.message);
+    }
+  }
+
+  // Resilient fallback if Gemini API call encounters network error or rate limit
+  if (!answer) {
+    if (appStatusResult && !appStatusResult.error) {
+      answer = isTa
+        ? `📋 **விண்ணப்பக் கண்காணிப்பு நிலை:**\n\nவிண்ணப்ப எண்: **${appStatusResult.demo_reference_id}** (${appStatusResult.scheme_name_ta})\n**தற்போதைய நிலை:** ${appStatusResult.current_status}\n\n${appStatusResult.summary_ta}`
+        : `📋 **Application Status Report:**\n\nApplication ID: **${appStatusResult.demo_reference_id}** (${appStatusResult.scheme_name_en})\n**Current Status:** ${appStatusResult.current_status}\n\n${appStatusResult.summary_en}`;
+    } else if (primaryScheme) {
+      const rules = typeof primaryScheme.eligibility_rules === 'string' ? JSON.parse(primaryScheme.eligibility_rules) : (primaryScheme.eligibility_rules || {});
+      const ageTextEn = rules.min_age !== undefined || rules.max_age !== undefined ? `${rules.min_age || 0} to ${rules.max_age || 100} years` : 'No specific age limit';
+      const ageTextTa = rules.min_age !== undefined || rules.max_age !== undefined ? `${rules.min_age || 0} முதல் ${rules.max_age || 100} வயது வரை` : 'குறிப்பிட்ட வயது வரம்பு இல்லை';
+      const genderTextEn = rules.gender && rules.gender !== 'Any' ? rules.gender : 'Any / All genders';
+      const genderTextTa = rules.gender && rules.gender !== 'Any' ? (rules.gender === 'Female' ? 'பெண்கள் மட்டும்' : rules.gender) : 'அனைத்து பாலினத்தவரும்';
+      const incTextEn = rules.max_income ? `Up to ₹${Number(rules.max_income).toLocaleString('en-IN')}/year` : 'No income ceiling';
+      const incTextTa = rules.max_income ? `அதிகபட்சம் ₹${Number(rules.max_income).toLocaleString('en-IN')}/ஆண்டு` : 'வருமான உச்சவரம்பு இல்லை';
+      const commText = Array.isArray(rules.community_category) ? rules.community_category.join(', ') : (rules.community_category || 'All communities');
+      const docs = docRes && Array.isArray(docRes.documents_required) ? docRes.documents_required.map(d => `- ${d}`).join('\n') : '- Aadhaar Card, Ration Card';
+
+      if (isTa) {
+        answer = `### ${primaryScheme.name_ta}\n\n` +
+          `**துறை:** ${primaryScheme.department}\n\n` +
+          `**திட்டத்தின் பயன்கள்:**\n${primaryScheme.benefits_ta || primaryScheme.benefits_en}\n\n` +
+          `**பொதுவான தகுதி வரம்புகள் (தகவலுக்கு மட்டும்):**\n` +
+          `- வயது வரம்பு: ${ageTextTa}\n` +
+          `- பாலினம்: ${genderTextTa}\n` +
+          `- வருமான வரம்பு: ${incTextTa}\n` +
+          `- சமூகப் பிரிவு: ${commText}\n` +
+          `- தகுதி வகை: ${rules.occupation || 'அனைத்து தகுதியான குடிமக்கள்'}\n\n` +
+          `**தேவையான சான்றிதழ்கள்:**\n${docs}\n\n` +
+          `**விண்ணப்பிக்கும் முறை:**\n${procRes ? procRes.application_process_ta : 'அருகிலுள்ள இ-சேவை மையம் அல்லது இணையதளம் வழியாக விண்ணப்பிக்கவும்.'}\n\n` +
+          `🔗 **அதிகாரப்பூர்வ இணையதளம்:** [${procRes ? procRes.official_link : 'https://tn.gov.in/schemes'}](${procRes ? procRes.official_link : 'https://tn.gov.in/schemes'})`;
+      } else {
+        answer = `### ${primaryScheme.name_en}\n\n` +
+          `**Department:** ${primaryScheme.department}\n\n` +
+          `**Key Benefits:**\n${primaryScheme.benefits_en || primaryScheme.benefits_ta}\n\n` +
+          `**General Eligibility Requirements (Information Only):**\n` +
+          `- Age Range: ${ageTextEn}\n` +
+          `- Gender: ${genderTextEn}\n` +
+          `- Income Ceiling: ${incTextEn}\n` +
+          `- Community Category: ${commText}\n` +
+          `- Target Group: ${rules.occupation || 'Open to all eligible citizens'}\n\n` +
+          `**Required Documents:**\n${docs}\n\n` +
+          `**Application Procedure:**\n${procRes ? procRes.application_process_en : 'Apply through nearest e-Seva centre or official government portal.'}\n\n` +
+          `🔗 **Official Application Link:** [${procRes ? procRes.official_link : 'https://tn.gov.in/schemes'}](${procRes ? procRes.official_link : 'https://tn.gov.in/schemes'})`;
+      }
+    } else {
+      answer = isTa
+        ? `மன்னிக்கவும், உங்கள் கேள்விக்குரிய திட்ட விவரங்களை நேரடியாகக் கண்டறிய முடியவில்லை. தயவுசெய்து திட்டத்தின் பெயர் அல்லது துறையை தெளிவுபடுத்தவும்.`
+        : `I could not locate an exact match for your query in the verified Tamil Nadu schemes database. Please specify the scheme name, beneficiary category, or department.`;
+    }
+
+    // Context-aware notification check tied to chatbot searches
+    if (primaryScheme) {
+      try {
+        const notifRes = await evaluateNotificationTargets(primaryScheme, {
+          type: 'user_search',
+          user_id,
+          language: isTa ? 'ta' : 'en'
+        });
+        if (notifRes && notifRes.has_update && notifRes.update_text) {
+          trace.push({
+            tool: 'notification_agent',
+            input: { context: 'user_search', scheme_id: primaryScheme.id, scheme_name: primaryScheme.name_en },
+            output: { relevant: true, update: notifRes.update_text }
+          });
+          if (!answer.includes('Related update') && !answer.includes('தொடர்புடைய புதுப்பிப்பு')) {
+            answer += `\n\n${notifRes.update_text}`;
+          }
+        }
+      } catch (e) {
+        console.warn('[Notification Agent Search Context Error]', e.message);
+      }
+    }
   }
 
   return { answer, trace };
@@ -763,11 +1279,12 @@ app.post('/api/auth/signup', async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { name, password } = req.body;
-    const uRes = await pool.query(`SELECT * FROM users WHERE name = $1`, [name]);
-    if (uRes.rows.length === 0) return res.status(401).json({ error: "Invalid credentials" });
+    const cleanName = (name || '').trim();
+    const uRes = await pool.query(`SELECT * FROM users WHERE LOWER(TRIM(name)) = LOWER($1)`, [cleanName]);
+    if (uRes.rows.length === 0) return res.status(401).json({ error: "Invalid username or password" });
     const user = uRes.rows[0];
     const valid = await bcrypt.compare(password, user.password_hash);
-    if (!valid) return res.status(401).json({ error: "Invalid credentials" });
+    if (!valid) return res.status(401).json({ error: "Invalid username or password" });
     delete user.password_hash;
     const accessToken = jwt.sign({ id: user.id, name: user.name, role: user.role }, JWT_SECRET, { expiresIn: '12h' });
     res.json({ message: "Login successful", user, accessToken });
@@ -776,9 +1293,9 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.post('/api/chat', optionalAuthMiddleware, async (req, res) => {
   try {
-    const { message, language } = req.body;
+    const { message, language, history } = req.body;
     const userId = req.user ? req.user.id : null;
-    const result = await runOrchestrator({ message, language, user_id: userId });
+    const result = await runOrchestrator({ message, language, user_id: userId, history });
     res.json(result);
   } catch (e) {
     console.error("[Chat API Processing Error]", e);
@@ -790,6 +1307,52 @@ app.get('/api/schemes', async (req, res) => {
   try {
     const sRes = await pool.query(`SELECT * FROM schemes WHERE status = 'live' ORDER BY id ASC`);
     res.json(sRes.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/schemes/:id', async (req, res) => {
+  try {
+    const sRes = await pool.query(`SELECT * FROM schemes WHERE id = $1`, [req.params.id]);
+    if (sRes.rows.length === 0) return res.status(404).json({ error: "Scheme not found" });
+    res.json(sRes.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/schemes/:id/check-eligibility', optionalAuthMiddleware, async (req, res) => {
+  try {
+    const schemeId = req.params.id;
+    const userProfile = req.body.user_profile;
+    if (!userProfile || Object.keys(userProfile).length === 0) {
+      return res.status(400).json({ error: "Missing eligibility inputs. Please provide the required values." });
+    }
+    const eligRes = await toolCheckEligibility({ scheme_id: schemeId, user_profile: userProfile });
+    const sRes = await pool.query(`SELECT * FROM schemes WHERE id = $1`, [schemeId]);
+    res.json({ ...eligRes, scheme: sRes.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/users/profile', authMiddleware, async (req, res) => {
+  try {
+    const { age, income, gender, community_category, district, occupation } = req.body;
+    const upd = await pool.query(`
+      UPDATE users
+      SET age = COALESCE($1, age),
+          income = COALESCE($2, income),
+          gender = COALESCE($3, gender),
+          community_category = COALESCE($4, community_category),
+          district = COALESCE($5, district),
+          occupation = COALESCE($6, occupation)
+      WHERE id = $7 RETURNING id, name, age, income, gender, community_category, district, occupation, role
+    `, [
+      age !== undefined && age !== '' && age !== null ? Number(age) : null,
+      income !== undefined && income !== '' && income !== null ? Number(income) : null,
+      gender || null,
+      community_category || null,
+      district || null,
+      occupation || null,
+      req.user.id
+    ]);
+    res.json({ message: "Profile updated successfully", user: upd.rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -827,10 +1390,21 @@ app.post('/api/applications', authMiddleware, async (req, res) => {
       VALUES ($1, $2, $3, 'Applied', $4) RETURNING *
     `, [req.user.id, scheme_id, demoRefId, JSON.stringify(history)]);
 
+    // Record submission in notifications panel for user
+    await pool.query(`
+      INSERT INTO notifications (user_id, type, scheme_id, message_en, message_ta)
+      VALUES ($1, 'status_change', $2, $3, $4)
+    `, [
+      req.user.id,
+      scheme_id,
+      `Application submitted successfully — Demo App ID: ${demoRefId}`,
+      `விண்ணப்பம் வெற்றிகரமாக சமர்ப்பிக்கப்பட்டது — மாதிரி எண்: ${demoRefId}`
+    ]).catch(() => {});
+
     res.status(201).json({
       message: "Demo application submitted",
       demo_reference_id: demoRefId,
-      notice: "Demo Application ID — internal record only, not a real government submission",
+      notice: `Demo App ID: ${demoRefId} ✓`,
       application: ins.rows[0]
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -847,6 +1421,18 @@ app.patch('/api/applications/:id/status', authMiddleware, async (req, res) => {
     let history = typeof appRec.status_history === 'string' ? JSON.parse(appRec.status_history) : appRec.status_history;
     history.push({ stage: new_stage, timestamp: new Date().toISOString(), remarks: remarks || `Advanced to ${new_stage}` });
     const upd = await pool.query(`UPDATE applications SET status = $1, status_history = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 RETURNING *`, [new_stage, JSON.stringify(history), appRec.id]);
+    
+    // Record status advance in notifications panel for user
+    await pool.query(`
+      INSERT INTO notifications (user_id, type, scheme_id, message_en, message_ta)
+      VALUES ($1, 'status_change', $2, $3, $4)
+    `, [
+      appRec.user_id,
+      appRec.scheme_id,
+      `Application ${appRec.demo_reference_id} status updated to '${new_stage}': ${remarks || 'Review progressing.'}`,
+      `விண்ணப்பம் ${appRec.demo_reference_id} நிலை '${new_stage}' என மாற்றப்பட்டது: ${remarks || 'சரிபார்ப்பு நடைபெறுகிறது.'}`
+    ]).catch(() => {});
+
     res.json({ message: "Status updated", application: upd.rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

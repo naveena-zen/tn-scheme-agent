@@ -115,23 +115,46 @@ GOOGLE_APPLICATION_CREDENTIALS=your_google_credentials
 
 ## 🚀 How to Run & Verify
 
-### 1. Run Standalone Agent Core Test Suite
+### 🐳 Run Stack with Docker Compose (Recommended)
+You can run the entire application stack — PostgreSQL (with pgvector), Node.js Express backend, and React Nginx frontend — with a single command:
+
+```bash
+docker-compose up --build
+```
+- **Frontend Dashboard:** [http://localhost:5173](http://localhost:5173)
+- **Backend API:** [http://localhost:5000](http://localhost:5000)
+- **PostgreSQL Database:** `localhost:5432` (`tn_scheme_assistant`)
+
+To run in detached background mode:
+```bash
+docker-compose up -d
+```
+To shut down containers and networks:
+```bash
+docker-compose down
+```
+
+---
+
+### 💻 Run Stack Locally (Bare-Metal)
+
+#### 1. Run Standalone Agent Core Test Suite
 Verify the Agentic AI & RAG core independently without running the web app:
 
 ```bash
 cd backend
 npm run test:agent
 ```
-*(Runs 5 sample queries in English & Tamil and outputs multi-tool reasoning traces)*
+*(Runs sample queries in English & Tamil and outputs multi-tool reasoning traces)*
 
-### 2. Start Backend Server
+#### 2. Start Backend Server
 ```bash
 cd backend
 npm start
 # Server online at http://localhost:5000
 ```
 
-### 3. Start Frontend Web Application
+#### 3. Start Frontend Web Application
 ```bash
 cd frontend
 npm run dev
