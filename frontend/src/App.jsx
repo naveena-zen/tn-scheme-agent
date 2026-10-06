@@ -3,8 +3,11 @@ import {
   MessageSquare, BookOpen, Clock, Shield, Bell, LogIn, LogOut, Globe,
   Send, Mic, MicOff, ChevronDown, ChevronUp, Cpu, Wrench, Search,
   CheckCircle2, FileText, Activity, Volume2, X, Filter, ExternalLink,
-  Award, Building2, AlertTriangle, ShieldCheck, RefreshCw, Database, Sparkles, Check, AlertCircle, Info, Loader2
+  Award, Building2, AlertTriangle, ShieldCheck, RefreshCw, Database, Sparkles, Check, AlertCircle, Info, Loader2,
+  MapPin, Compass, UserCheck, ArrowRight
 } from 'lucide-react';
+import NearbyOfficesModal from './components/NearbyOfficesModal';
+import FindSchemesForMe from './components/FindSchemesForMe';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
@@ -16,6 +19,8 @@ const translations = {
     app_title: "TN Citizen Assistant",
     app_subtitle: "Tamil Nadu Autonomous Citizen Service Assistant",
     chat_tab: "AI Assistant",
+    find_schemes_tab: "Find Schemes for Me",
+    nearby_offices_tab: "Nearby Offices",
     schemes_tab: "Scheme Browser",
     tracker_tab: "Application Tracker",
     admin_tab: "Admin Console",
@@ -55,6 +60,8 @@ const translations = {
     app_title: "தமிழ்நாடு குடிமக்கள் உதவி",
     app_subtitle: "தமிழ்நாடு தன்னாட்சி குடிமக்கள் சேவை உதவி மையம்",
     chat_tab: "AI உதவி மையம்",
+    find_schemes_tab: "எனக்கான திட்டங்கள்",
+    nearby_offices_tab: "அருகிலுள்ள மையங்கள்",
     schemes_tab: "அரசுத் திட்டங்கள்",
     tracker_tab: "விண்ணப்பக் கண்காணிப்பு",
     admin_tab: "நிர்வாகக் குழு",
@@ -108,6 +115,16 @@ export default function App() {
   const [initialChatQuery, setInitialChatQuery] = useState('');
   const [toast, setToast] = useState(null);
   const [activeAppId, setActiveAppId] = useState(null);
+
+  const [officesModalOpen, setOfficesModalOpen] = useState(false);
+  const [officesFilter, setOfficesFilter] = useState('all');
+  const [officesSchemeContext, setOfficesSchemeContext] = useState(null);
+
+  const handleOpenOffices = (officeType = 'all', schemeName = null) => {
+    setOfficesFilter(officeType || 'all');
+    setOfficesSchemeContext(schemeName || null);
+    setOfficesModalOpen(true);
+  };
 
   const showToast = (message) => {
     setToast(message);
@@ -190,11 +207,17 @@ export default function App() {
             <button onClick={() => setActiveTab('chat')} className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-sm font-medium ${activeTab === 'chat' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'}`}>
               <MessageSquare size={16} /><span>{t('chat_tab')}</span>
             </button>
+            <button onClick={() => setActiveTab('find_schemes')} className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-sm font-medium ${activeTab === 'find_schemes' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'}`}>
+              <Sparkles size={16} className="text-emerald-400" /><span>{t('find_schemes_tab')}</span>
+            </button>
             <button onClick={() => setActiveTab('schemes')} className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-sm font-medium ${activeTab === 'schemes' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'}`}>
               <BookOpen size={16} /><span>{t('schemes_tab')}</span>
             </button>
             <button onClick={() => setActiveTab('tracker')} className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-sm font-medium ${activeTab === 'tracker' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'}`}>
               <Clock size={16} /><span>{t('tracker_tab')}</span>
+            </button>
+            <button onClick={() => handleOpenOffices('all')} className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-emerald-400 hover:text-white hover:bg-slate-800 transition border border-emerald-500/30">
+              <MapPin size={15} className="text-emerald-400" /><span>{t('nearby_offices_tab')}</span>
             </button>
             {user && user.role === 'admin' && (
               <button onClick={() => setActiveTab('admin')} className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-sm font-medium ${activeTab === 'admin' ? 'bg-amber-600 text-white' : 'text-amber-400 hover:text-white'}`}>
@@ -234,9 +257,43 @@ export default function App() {
 
       {/* Main Content Body */}
       <main className="flex-1 pb-10">
-        {activeTab === 'chat' && <ChatComponent t={t} lang={lang} user={user} initialQuery={initialChatQuery} onClearInitialQuery={() => setInitialChatQuery('')} />}
-        {activeTab === 'schemes' && <SchemesComponent t={t} lang={lang} onOpenDetails={handleOpenDetails} />}
-        {activeTab === 'tracker' && <TrackerComponent t={t} lang={lang} user={user} activeAppId={activeAppId} onClearActiveAppId={() => setActiveAppId(null)} />}
+        {activeTab === 'chat' && (
+          <ChatComponent
+            t={t}
+            lang={lang}
+            user={user}
+            initialQuery={initialChatQuery}
+            onClearInitialQuery={() => setInitialChatQuery('')}
+            onOpenOfficeFinder={handleOpenOffices}
+          />
+        )}
+        {activeTab === 'find_schemes' && (
+          <FindSchemesForMe
+            user={user}
+            lang={lang}
+            apiUrl={API_URL}
+            onOpenOfficeFinder={handleOpenOffices}
+            onOpenSchemeDetails={handleOpenDetails}
+            onRequireAuth={() => setAuthModalOpen(true)}
+          />
+        )}
+        {activeTab === 'schemes' && (
+          <SchemesComponent
+            t={t}
+            lang={lang}
+            onOpenDetails={handleOpenDetails}
+            onOpenOfficeFinder={handleOpenOffices}
+          />
+        )}
+        {activeTab === 'tracker' && (
+          <TrackerComponent
+            t={t}
+            lang={lang}
+            user={user}
+            activeAppId={activeAppId}
+            onClearActiveAppId={() => setActiveAppId(null)}
+          />
+        )}
         {activeTab === 'admin' && user && user.role === 'admin' && <AdminComponent t={t} lang={lang} />}
       </main>
 
@@ -247,7 +304,25 @@ export default function App() {
       {/* Modals */}
       <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} onAuthSuccess={(u) => { setUser(u); setAuthModalOpen(false); }} />
       <NotificationsModal isOpen={notificationsOpen} onClose={() => setNotificationsOpen(false)} onUnreadUpdate={setUnreadCount} lang={lang} />
-      <SchemeDetailsModal isOpen={detailsModalOpen} onClose={() => setDetailsModalOpen(false)} scheme={selectedSchemeForDetails} lang={lang} t={t} user={user} onStartDemoApp={handleStartDemoApp} onAskInChat={handleAskInChat} />
+      <SchemeDetailsModal
+        isOpen={detailsModalOpen}
+        onClose={() => setDetailsModalOpen(false)}
+        scheme={selectedSchemeForDetails}
+        lang={lang}
+        t={t}
+        user={user}
+        onStartDemoApp={handleStartDemoApp}
+        onAskInChat={handleAskInChat}
+        onOpenOfficeFinder={handleOpenOffices}
+      />
+      <NearbyOfficesModal
+        isOpen={officesModalOpen}
+        onClose={() => setOfficesModalOpen(false)}
+        initialFilter={officesFilter}
+        schemeContext={officesSchemeContext}
+        lang={lang}
+        apiUrl={API_URL}
+      />
       <DemoAppModal
         isOpen={demoAppModalOpen}
         onClose={() => setDemoAppModalOpen(false)}
@@ -369,7 +444,24 @@ function FormattedMessage({ text }) {
 // ============================================================================
 // CHAT INTERFACE COMPONENT WITH COLLAPSIBLE REASONING TRACE
 // ============================================================================
-function ChatComponent({ t, lang, user, initialQuery, onClearInitialQuery }) {
+function detectOfficeType(text = '', trace = []) {
+  const lower = (text || '').toLowerCase();
+  for (const step of trace || []) {
+    const outStr = JSON.stringify(step.output || '').toLowerCase();
+    if (outStr.includes('patta') || outStr.includes('taluk') || outStr.includes('tahsildar') || outStr.includes('வருவாய்') || outStr.includes('uzhavar')) return 'taluk_office';
+    if (outStr.includes('ration') || outStr.includes('aay') || outStr.includes('civil supplies') || outStr.includes('ரேஷன்') || outStr.includes('food')) return 'ration_shop';
+    if (outStr.includes('collector') || outStr.includes('cmchis') || outStr.includes('மருத்துவக் காப்பீடு')) return 'collectorate';
+    if (outStr.includes('panchayat') || outStr.includes('municip') || outStr.includes('green house') || outStr.includes('மாநகராட்சி')) return 'municipality';
+    if (outStr.includes('esevai') || outStr.includes('e-sevai') || outStr.includes('aadhaar') || outStr.includes('kmut') || outStr.includes('magalir')) return 'esevai';
+  }
+  if (lower.includes('patta') || lower.includes('taluk') || lower.includes('tahsildar') || lower.includes('வட்டாட்சியர்') || lower.includes('uzhavar')) return 'taluk_office';
+  if (lower.includes('collector') || lower.includes('cmchis') || lower.includes('மருத்துவக் காப்பீடு') || lower.includes('ஆட்சியர்')) return 'collectorate';
+  if (lower.includes('ration') || lower.includes('fair price') || lower.includes('aay') || lower.includes('ரேஷன்') || lower.includes('நியாயவிலை')) return 'ration_shop';
+  if (lower.includes('municip') || lower.includes('corporation') || lower.includes('panchayat') || lower.includes('மாநகராட்சி') || lower.includes('green house')) return 'municipality';
+  return 'esevai';
+}
+
+function ChatComponent({ t, lang, user, initialQuery, onClearInitialQuery, onOpenOfficeFinder }) {
   const [messages, setMessages] = useState([{ id: 'welcome', sender: 'agent', text: t('welcome'), trace: [] }]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -442,6 +534,26 @@ function ChatComponent({ t, lang, user, initialQuery, onClearInitialQuery }) {
           <div key={msg.id} className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}>
             <div className={`max-w-[85%] rounded-2xl p-4 shadow-lg text-sm leading-relaxed ${msg.sender === 'user' ? 'bg-gradient-to-r from-emerald-600 to-teal-700 text-white rounded-br-none' : 'glass-panel border border-slate-800 text-slate-100 rounded-bl-none'}`}>
               <FormattedMessage text={msg.text} />
+
+              {/* SMART ACTION BUTTON: Find Nearest Office / Service Centre */}
+              {msg.sender === 'agent' && msg.id !== 'welcome' && (
+                <div className="mt-3 pt-2.5 border-t border-slate-800/80">
+                  <button
+                    type="button"
+                    onClick={() => onOpenOfficeFinder && onOpenOfficeFinder(detectOfficeType(msg.text, msg.trace))}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 text-xs font-semibold transition group shadow-sm"
+                  >
+                    <MapPin size={13} className="text-emerald-400 group-hover:scale-110 transition-transform" />
+                    <span>
+                      {lang === 'ta'
+                        ? 'அலுவலகத்திற்கு செல்ல வேண்டுமா? அருகிலுள்ள சேவை மையத்தைக் கண்டறியவும்.'
+                        : 'Need to visit an office? Find the nearest service centre.'}
+                    </span>
+                    <ArrowRight size={12} className="text-emerald-400" />
+                  </button>
+                </div>
+              )}
+
               {msg.trace && msg.trace.length > 0 && (
                 <div className="mt-3 pt-3 border-t border-slate-800/80 text-xs">
                   <button
@@ -502,7 +614,7 @@ function ChatComponent({ t, lang, user, initialQuery, onClearInitialQuery }) {
 // ============================================================================
 // SCHEME BROWSER COMPONENT
 // ============================================================================
-function SchemesComponent({ t, lang, onOpenDetails }) {
+function SchemesComponent({ t, lang, onOpenDetails, onOpenOfficeFinder }) {
   const [schemes, setSchemes] = useState([]);
   const [category, setCategory] = useState('');
   const [search, setSearch] = useState('');
@@ -587,14 +699,25 @@ function SchemesComponent({ t, lang, onOpenDetails }) {
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => onOpenDetails(s)}
-                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold flex items-center justify-center space-x-1.5 shadow-md shadow-emerald-950/40 transition-all hover:scale-[1.01]"
-              >
-                <Info size={14} />
-                <span>{t('view_details')}</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => onOpenDetails(s)}
+                  className="flex-1 py-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-emerald-500 text-white rounded-xl text-xs font-semibold flex items-center justify-center space-x-1.5 shadow-md transition-all"
+                >
+                  <Info size={14} />
+                  <span>{t('view_details')}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onOpenOfficeFinder && onOpenOfficeFinder(s.required_office_type || 'esevai', lang === 'ta' ? s.name_ta : s.name_en)}
+                  className="py-2.5 px-3 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-gray-950 border border-emerald-500/40 rounded-xl text-xs font-semibold flex items-center justify-center space-x-1 transition-all"
+                  title={lang === 'ta' ? 'அருகிலுள்ள மையம்' : 'Find Nearby Office'}
+                >
+                  <MapPin size={14} />
+                  <span className="hidden sm:inline">{lang === 'ta' ? 'அலுவலகம்' : 'Office'}</span>
+                </button>
+              </div>
             </div>
           );
         })}
@@ -1283,7 +1406,7 @@ function NotificationsModal({ isOpen, onClose, onUnreadUpdate, lang }) {
 // ============================================================================
 // SCHEME DETAILS & ELIGIBILITY MODAL (REQUIREMENTS-FIRST WITH TRIGGERED CHECK)
 // ============================================================================
-function SchemeDetailsModal({ isOpen, onClose, scheme, lang, t, onStartDemoApp, onAskInChat, user }) {
+function SchemeDetailsModal({ isOpen, onClose, scheme, lang, t, onStartDemoApp, onAskInChat, user, onOpenOfficeFinder }) {
   const [showCheckForm, setShowCheckForm] = useState(false);
   const [inputs, setInputs] = useState({ age: '', gender: '', income: '', community_category: '', occupation: '', district: '' });
   const [evalResult, setEvalResult] = useState(null);
@@ -1673,12 +1796,12 @@ function SchemeDetailsModal({ isOpen, onClose, scheme, lang, t, onStartDemoApp, 
         )}
 
         {/* Modal Bottom Actions */}
-        <div className="pt-2 border-t border-slate-800 flex flex-col sm:flex-row items-center gap-3">
+        <div className="pt-2 border-t border-slate-800 flex flex-col sm:flex-row items-center gap-2.5">
           {!showCheckForm && (
             <button
               type="button"
               onClick={() => setShowCheckForm(true)}
-              className="w-full sm:flex-1 py-2.5 px-4 bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-emerald-500 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all shadow-md"
+              className="w-full sm:flex-1 py-2.5 px-3 bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-emerald-500 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all shadow-md"
             >
               <ShieldCheck size={16} className="text-emerald-400" />
               <span>{lang === 'ta' ? "நான் தகுதியானவரா எனப் பார்க்க" : "Check If I'm Eligible"}</span>
@@ -1687,8 +1810,22 @@ function SchemeDetailsModal({ isOpen, onClose, scheme, lang, t, onStartDemoApp, 
 
           <button
             type="button"
+            onClick={() => {
+              onClose();
+              if (onOpenOfficeFinder) {
+                onOpenOfficeFinder(scheme.required_office_type || 'esevai', lang === 'ta' ? scheme.name_ta : scheme.name_en);
+              }
+            }}
+            className="w-full sm:flex-1 py-2.5 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all shadow-md bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-emerald-400 text-emerald-300"
+          >
+            <MapPin size={15} className="text-emerald-400" />
+            <span>{lang === 'ta' ? 'அருகிலுள்ள சேவை மையம்' : 'Find Nearby Office'}</span>
+          </button>
+
+          <button
+            type="button"
             onClick={handleApplyClick}
-            className="w-full sm:flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all shadow-lg bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-950/40"
+            className="w-full sm:flex-1 py-2.5 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all shadow-lg bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-950/40"
           >
             <CheckCircle2 size={16} />
             <span>{t('start_app_btn')}</span>
