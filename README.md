@@ -79,6 +79,18 @@ scheme assistant/
 9. **Dual-Language & Voice Round-Trip**:
    - Instant language switching between English and Tamil (தமிழ்).
    - Integrated mic button for voice STT transcription and audio TTS response synthesis.
+10. **Nearby Government Offices & e-Sevai Maiyam Locator (Feature 1)**:
+    - Interactive **Leaflet + OpenStreetMap** service center finder with browser geolocation (`navigator.geolocation`) and graceful manual fallback (all 38 Tamil Nadu districts, pincode, area).
+    - Google Maps-style **bottom card carousel** with rating badges, distance in km, operating hours (`Open • Closes at 5:30 PM`), "Get Directions", "Call", and "Share".
+    - Smart office category filter chips: e-Sevai Maiyam, Taluk Office, Collectorate, Municipality/Corporation, Ration Shop, and All.
+    - Smart contextual pre-selection linking schemes directly to their required service counter.
+    - 10-minute spatial caching to optimize API calls and minimize latency.
+11. **"Find Schemes for Me" Profile-Based Recommendations (Feature 2)**:
+    - 12-criterion citizen profile manager: age, gender, district, community (OC/BC/MBC/SC/ST), income, occupation, education level, marital status, disability, house ownership, ration card type, and children count.
+    - **Two-Stage Recommendation Pipeline**: Deterministic rule-based filter first (explainable & deterministic), followed by PII-scrubbed LLM re-ranking and plain-language match explanations in English and Tamil.
+    - Status badges: `"Eligible"`, `"Likely eligible"`, and `"Missing info"` (with explicit missing field checklist).
+    - Zero PII sent to LLMs (names, phone, Aadhaar scrubbed; only anonymized eligibility attributes evaluated).
+    - Action buttons on every recommended scheme card: "How to Apply" and "Find Nearby Office" linking directly to the map locator.
 
 ---
 
@@ -109,6 +121,15 @@ JWT_REFRESH_SECRET=tn_scheme_assistant_refresh_token_secret_key_2026
 # Firebase Cloud Messaging & Google Cloud STT/TTS
 FIREBASE_SERVICE_ACCOUNT=your_firebase_credentials
 GOOGLE_APPLICATION_CREDENTIALS=your_google_credentials
+
+# Map & Places Provider Configuration (Feature 1: Nearby Government Offices)
+# Free tier OpenStreetMap + Overpass API default (zero configuration required)
+OVERPASS_API_URL=https://overpass-api.de/api/interpreter
+MAPBOX_ACCESS_TOKEN=your_mapbox_access_token_optional
+GOOGLE_PLACES_API_KEY=your_google_places_api_key_optional
+
+# Frontend Environment Variables
+VITE_API_URL=http://localhost:5000
 ```
 
 ---
@@ -138,9 +159,16 @@ docker-compose down
 
 ### 💻 Run Stack Locally (Bare-Metal)
 
-#### 1. Run Standalone Agent Core Test Suite
-Verify the Agentic AI & RAG core independently without running the web app:
+#### 1. Run Eligibility Engine Test Suite (15 Test Cases)
+Verify deterministic criteria, age limits, gender filters, income ceilings, community restrictions, missing info detection, and recommendation ranking:
+```bash
+cd backend
+npm run test:eligibility
+```
+*(Runs 15 test scenarios verifying deterministic matching with zero external dependencies)*
 
+#### 2. Run Standalone Agent Core Test Suite
+Verify the Agentic AI & RAG core independently without running the web app:
 ```bash
 cd backend
 npm run test:agent
@@ -167,11 +195,14 @@ npm run dev
 
 | Feature Component | Verification Method | Status |
 | :--- | :--- | :--- |
+| **Nearby Offices & e-Sevai (Feature 1)** | Leaflet OSM map, geolocation + district fallback, 10-min cache, carousel & directions | **VERIFIED PASSED ✅** |
+| **"Find Schemes for Me" (Feature 2)** | 12-criterion profile form, consent toggle, PII scrubbing, 14 verified TN schemes dataset | **VERIFIED PASSED ✅** |
+| **Eligibility Test Suite** | Executed `npm run test:eligibility` (15/15 test scenarios confirmed) | **VERIFIED PASSED ✅** |
 | **Agentic RAG Core** | Executed `npm run test:agent` (4/5 multi-tool execution traces confirmed) | **VERIFIED PASSED ✅** |
-| **Database Migration & Seed** | Seeded 6 real TN schemes (KMUT, Pudhumai Penn, Tamil Pudhalvan, CMCHIS, Naan Mudhalvan, Marriage Assistance) | **VERIFIED PASSED ✅** |
+| **Database Migration & Seed** | Seeded verified TN schemes with `required_office_type` and extended user profile columns | **VERIFIED PASSED ✅** |
 | **Notification Feature** | Tested `evaluateNotificationTargets` + `notifications` table inserts + FCM web push setup | **VERIFIED PASSED ✅** |
 | **Demo Application & Tracker** | Tested demo ID generation, horizontal stage progression timeline & admin status advancer | **VERIFIED PASSED ✅** |
-| **Frontend Production Build** | Executed `npm run build` in `frontend/` (0 compilation errors, built in 13.28s) | **VERIFIED PASSED ✅** |
+| **Frontend Production Build** | Executed `npm run build` in `frontend/` (0 compilation errors, built successfully) | **VERIFIED PASSED ✅** |
 
 ---
 
