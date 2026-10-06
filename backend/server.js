@@ -18,6 +18,9 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 
 const genAI = GEMINI_API_KEY && GEMINI_API_KEY !== 'your_gemini_api_key_here' ? new GoogleGenerativeAI(GEMINI_API_KEY) : null;
 
+const { findSchemesForProfile, evaluateSchemeEligibility, loadVerifiedSchemes } = require('./services/eligibilityEngine');
+const { getNearbyOffices } = require('./services/officesService');
+
 // ============================================================================
 // 1. DATABASE CONNECTION, MIGRATION & SEEDING
 // ============================================================================
@@ -129,6 +132,19 @@ async function initDb() {
 
   await pool.query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS scheme_id INT REFERENCES schemes(id) ON DELETE SET NULL;`).catch(() => {});
   await pool.query(`ALTER TABLE schemes ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;`).catch(() => {});
+  await pool.query(`ALTER TABLE schemes ADD COLUMN IF NOT EXISTS required_office_type VARCHAR(50) DEFAULT 'esevai';`).catch(() => {});
+
+  // Extended profile columns for Feature 2
+  await pool.query(`
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS education_level TEXT,
+      ADD COLUMN IF NOT EXISTS marital_status TEXT,
+      ADD COLUMN IF NOT EXISTS disability BOOLEAN DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS house_ownership TEXT,
+      ADD COLUMN IF NOT EXISTS ration_card_type TEXT,
+      ADD COLUMN IF NOT EXISTS children_count INT DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS consent_data_processing BOOLEAN DEFAULT TRUE;
+  `).catch(() => {});
 
   const userCheck = await pool.query(`SELECT count(*) FROM users`);
   if (parseInt(userCheck.rows[0].count) === 0) {
@@ -282,6 +298,29 @@ async function initDb() {
     }
   } catch (e) {
     console.warn('[Seed Application Sync Error]', e.message);
+  }
+
+  // Synchronize verified schemes with required_office_type
+  try {
+    const verified = loadVerifiedSchemes();
+    for (const vs of verified) {
+      const match = await pool.query(`SELECT id FROM schemes WHERE name_en ILIKE $1 OR name_ta ILIKE $2 LIMIT 1`, [`%${vs.name_en.slice(0, 20)}%`, `%${vs.name_ta.slice(0, 15)}%`]);
+      if (match.rows.length > 0) {
+        await pool.query(`UPDATE schemes SET required_office_type = $1 WHERE id = $2`, [vs.required_office_type || 'esevai', match.rows[0].id]);
+      } else {
+        await pool.query(`
+          INSERT INTO schemes (name_en, name_ta, department, category, eligibility_rules, benefits_en, benefits_ta, documents_required, application_process_en, application_process_ta, official_link, required_office_type, status)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'live')
+        `, [
+          vs.name_en, vs.name_ta, vs.department, vs.category,
+          JSON.stringify(vs.eligibility_rules), vs.benefit_en, vs.benefit_ta,
+          JSON.stringify(vs.documents_required), vs.how_to_apply_en, vs.how_to_apply_ta,
+          vs.official_link, vs.required_office_type || 'esevai'
+        ]);
+      }
+    }
+  } catch (e) {
+    console.warn('[Verified Schemes Sync Warning]', e.message);
   }
 }
 
@@ -1374,18 +1413,72 @@ app.post('/api/schemes/:id/check-eligibility', optionalAuthMiddleware, async (re
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/users/profile', authMiddleware, async (req, res) => {
+// ============================================================================
+// NEARBY GOVERNMENT OFFICES & E-SEVAI MAIYAM (FEATURE 1)
+// ============================================================================
+app.get('/api/offices/nearby', async (req, res) => {
   try {
-    const { age, income, gender, community_category, district, occupation } = req.body;
+    const { lat, lng, district, query, office_type = 'all', max_distance_km } = req.query;
+    const result = await getNearbyOffices({
+      lat: lat ? Number(lat) : null,
+      lng: lng ? Number(lng) : null,
+      district,
+      query,
+      office_type,
+      max_distance_km: max_distance_km ? Number(max_distance_km) : 35
+    });
+    res.json(result);
+  } catch (e) {
+    console.error('[Nearby Offices Error]', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ============================================================================
+// CITIZEN PROFILE & RECOMMENDATIONS (FEATURE 2)
+// ============================================================================
+app.get('/api/users/profile', authMiddleware, async (req, res) => {
+  try {
+    const uRes = await pool.query(`
+      SELECT id, name, age, income, gender, community_category, district, occupation,
+             education_level, marital_status, disability, house_ownership, ration_card_type,
+             children_count, consent_data_processing, preferred_language, role
+      FROM users WHERE id = $1
+    `, [req.user.id]);
+    if (uRes.rows.length === 0) return res.status(404).json({ error: "User not found" });
+    res.json(uRes.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+const handleProfileUpdate = async (req, res) => {
+  try {
+    const {
+      age, income, gender, community_category, district, occupation,
+      education_level, marital_status, disability, house_ownership,
+      ration_card_type, children_count, consent_data_processing
+    } = req.body;
+
+    const isDis = disability === true || disability === 'true' || disability === 'Yes' || disability === 'yes';
+
     const upd = await pool.query(`
       UPDATE users
-      SET age = COALESCE($1, age),
-          income = COALESCE($2, income),
-          gender = COALESCE($3, gender),
-          community_category = COALESCE($4, community_category),
-          district = COALESCE($5, district),
-          occupation = COALESCE($6, occupation)
-      WHERE id = $7 RETURNING id, name, age, income, gender, community_category, district, occupation, role
+      SET age = $1,
+          income = $2,
+          gender = $3,
+          community_category = $4,
+          district = $5,
+          occupation = $6,
+          education_level = $7,
+          marital_status = $8,
+          disability = $9,
+          house_ownership = $10,
+          ration_card_type = $11,
+          children_count = $12,
+          consent_data_processing = COALESCE($13, consent_data_processing)
+      WHERE id = $14
+      RETURNING id, name, age, income, gender, community_category, district, occupation,
+                education_level, marital_status, disability, house_ownership, ration_card_type,
+                children_count, consent_data_processing, role
     `, [
       age !== undefined && age !== '' && age !== null ? Number(age) : null,
       income !== undefined && income !== '' && income !== null ? Number(income) : null,
@@ -1393,10 +1486,108 @@ app.post('/api/users/profile', authMiddleware, async (req, res) => {
       community_category || null,
       district || null,
       occupation || null,
+      education_level || null,
+      marital_status || null,
+      isDis,
+      house_ownership || null,
+      ration_card_type || null,
+      children_count !== undefined && children_count !== '' && children_count !== null ? Number(children_count) : 0,
+      consent_data_processing !== undefined ? Boolean(consent_data_processing) : true,
       req.user.id
     ]);
     res.json({ message: "Profile updated successfully", user: upd.rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
+};
+
+app.post('/api/users/profile', authMiddleware, handleProfileUpdate);
+app.put('/api/users/profile', authMiddleware, handleProfileUpdate);
+
+app.delete('/api/users/profile', authMiddleware, async (req, res) => {
+  try {
+    const upd = await pool.query(`
+      UPDATE users
+      SET age = NULL,
+          income = NULL,
+          gender = NULL,
+          community_category = NULL,
+          district = NULL,
+          occupation = NULL,
+          education_level = NULL,
+          marital_status = NULL,
+          disability = FALSE,
+          house_ownership = NULL,
+          ration_card_type = NULL,
+          children_count = 0,
+          consent_data_processing = FALSE
+      WHERE id = $1
+      RETURNING id, name, role
+    `, [req.user.id]);
+    res.json({ message: "Profile data cleared successfully", user: upd.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/schemes/recommended', optionalAuthMiddleware, async (req, res) => {
+  try {
+    const language = req.query.language || 'en';
+    const category = req.query.category || 'all';
+
+    let profile = {};
+    if (req.user && req.user.id) {
+      const uRes = await pool.query(`
+        SELECT age, income, gender, community_category, district, occupation,
+               education_level, marital_status, disability, house_ownership,
+               ration_card_type, children_count
+        FROM users WHERE id = $1
+      `, [req.user.id]);
+      if (uRes.rows.length > 0) profile = uRes.rows[0];
+    } else {
+      profile = {
+        age: req.query.age,
+        gender: req.query.gender,
+        income: req.query.income,
+        community_category: req.query.community_category,
+        district: req.query.district,
+        occupation: req.query.occupation,
+        education_level: req.query.education_level,
+        marital_status: req.query.marital_status,
+        disability: req.query.disability === 'true' || req.query.disability === 'Yes',
+        house_ownership: req.query.house_ownership,
+        ration_card_type: req.query.ration_card_type,
+        children_count: req.query.children_count
+      };
+    }
+
+    const recommendations = await findSchemesForProfile(profile, { language, category, genAI });
+    res.json(recommendations);
+  } catch (e) {
+    console.error('[Recommended Schemes Error]', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/schemes/find-for-me', optionalAuthMiddleware, async (req, res) => {
+  try {
+    const { profile = {}, language = 'en', category = 'all' } = req.body;
+    let effectiveProfile = { ...profile };
+
+    if (req.user && req.user.id) {
+      const uRes = await pool.query(`
+        SELECT age, income, gender, community_category, district, occupation,
+               education_level, marital_status, disability, house_ownership,
+               ration_card_type, children_count
+        FROM users WHERE id = $1
+      `, [req.user.id]);
+      if (uRes.rows.length > 0) {
+        effectiveProfile = { ...uRes.rows[0], ...profile };
+      }
+    }
+
+    const recommendations = await findSchemesForProfile(effectiveProfile, { language, category, genAI });
+    res.json(recommendations);
+  } catch (e) {
+    console.error('[Find Schemes For Me Error]', e);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.get('/api/applications', authMiddleware, async (req, res) => {
