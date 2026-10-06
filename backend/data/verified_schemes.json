@@ -1,0 +1,387 @@
+[
+  {
+    "id": 1,
+    "name_en": "Kalaignar Magalir Urimai Thogai Scheme (KMUT)",
+    "name_ta": "கலைஞர் மகளிர் உரிமைத் தொகை திட்டம் (KMUT)",
+    "department": "Special Programme Implementation Department",
+    "category": "women",
+    "benefit_en": "Monthly financial assistance of ₹1,000 directly credited to the bank accounts of women heads of eligible households.",
+    "benefit_ta": "தகுதியுள்ள குடும்பத் தலைவிகளுக்கு மாதம் ₹1,000 உரிமைத் தொகை நேரடியாக வங்கிக் கணக்கில் செலுத்தப்படும்.",
+    "eligibility_rules": {
+      "min_age": 21,
+      "gender": "Female",
+      "max_income": 250000,
+      "community": "Any",
+      "occupation": ["Homemaker", "Daily Wage / Unorganized Worker", "Farmer", "Self-employed", "Unemployed"],
+      "district": "All",
+      "house_ownership": ["Own", "Rented", "Homeless / Kutcha"],
+      "ration_card_type": ["PHH", "PHH-AAY", "NPHH"]
+    },
+    "documents_required": [
+      "Smart Ration Card (Family Card)",
+      "Aadhaar Card",
+      "Bank Passbook with Aadhaar seeding",
+      "Electricity Consumer Bill (for address confirmation)"
+    ],
+    "how_to_apply_en": "1. Fill the KMUT application form available at your fair price shop / special camp.\n2. Submit the form with Smart Ration Card and Aadhaar at your designated e-Sevai / Revenue Special Camp.\n3. Complete biometric authentication with the e-Sevai operator.\n4. Field verification is conducted by Revenue Inspector / VAO.\n5. Status SMS is sent to registered mobile.",
+    "how_to_apply_ta": "1. நியாயவிலைக் கடைகள் அல்லது சிறப்பு முகாம்களில் விண்ணப்பப் படிவத்தைப் பெறவும்.\n2. குடும்ப அட்டை மற்றும் ஆதாரை இ-சேவை / வருவாய்த்துறை சிறப்பு முகாமில் சமர்ப்பிக்கவும்.\n3. பயோமெட்ரிக் சரிபார்ப்பை பூர்த்தி செய்யவும்.\n4. வருவாய் ஆய்வாளர் / கிராம நிர்வாக அலுவலர் மூலம் சரிபார்க்கப்படும்.\n5. ஒப்புதல் தகவல் குறுஞ்செய்தியாக வரும்.",
+    "official_link": "https://kmut.tn.gov.in",
+    "required_office_type": "esevai",
+    "last_verified_at": "2026-03-15"
+  },
+  {
+    "id": 2,
+    "name_en": "Pudhumai Penn Scheme (Moovalur Ramamirtham Ammaiyar Higher Education Assurance)",
+    "name_ta": "புதுமைப் பெண் திட்டம் (உயர்கல்வி உறுதித் திட்டம்)",
+    "department": "Social Welfare and Women Empowerment Department",
+    "category": "education",
+    "benefit_en": "Financial assistance of ₹1,000 per month for female students who studied classes 6th to 12th in TN Government schools until completion of UG/Diploma/ITI courses.",
+    "benefit_ta": "அரசுப் பள்ளிகளில் 6 முதல் 12-ஆம் வகுப்பு வரை படித்து உயர்கல்வி பயிலும் மாணவிகளுக்கு மாதம் ₹1,000 கல்வி உதவித்தொகை.",
+    "eligibility_rules": {
+      "min_age": 17,
+      "max_age": 25,
+      "gender": "Female",
+      "occupation": ["Student"],
+      "education_level": ["Undergraduate", "Diploma"],
+      "community": "Any",
+      "district": "All"
+    },
+    "documents_required": [
+      "Aadhaar Card",
+      "Classes 6th to 12th Tamil Nadu Govt School Bonafide Certificate",
+      "College Admission Allotment Letter / ID Card",
+      "Student Bank Account Passbook"
+    ],
+    "how_to_apply_en": "1. Visit the Pen Kalvi portal (penkalvi.tn.gov.in).\n2. Register using School EMIS ID and Aadhaar.\n3. Upload government school bonafide certificate and college admission slip.\n4. College Nodal Officer and Social Welfare Officer verify the application.\n5. Monthly ₹1,000 credited via DBT.",
+    "how_to_apply_ta": "1. பெண் கல்வி இணையதளத்தில் (penkalvi.tn.gov.in) பதிவு செய்யவும்.\n2. பள்ளி EMIS எண் மற்றும் ஆதாரை உள்ளிடவும்.\n3. அரசுப் பள்ளி சான்றிதழ் மற்றும் கல்லூரி அனுமதிச் சீட்டை பதிவேற்றவும்.\n4. கல்லூரி ஒருங்கிணைப்பாளர் மற்றும் சமூக நல அலுவலர் சரிபார்ப்பார்.\n5. வங்கி கணக்கில் மாதம் ₹1,000 செலுத்தப்படும்.",
+    "official_link": "https://penkalvi.tn.gov.in",
+    "required_office_type": "esevai",
+    "last_verified_at": "2026-03-20"
+  },
+  {
+    "id": 3,
+    "name_en": "Tamil Pudhalvan Scheme",
+    "name_ta": "தமிழ் புதல்வன் திட்டம்",
+    "department": "Higher Education Department",
+    "category": "education",
+    "benefit_en": "Monthly financial aid of ₹1,000 for male students who studied classes 6th to 12th in Tamil Nadu Government schools, pursuing undergraduate degrees or polytechnic diplomas.",
+    "benefit_ta": "அரசுப் பள்ளிகளில் 6 முதல் 12-ஆம் வகுப்பு வரை படித்து பட்டப்படிப்பு அல்லது பாலிடெக்னிக் பயிலும் மாணவர்களுக்கு மாதம் ₹1,000 உதவித்தொகை.",
+    "eligibility_rules": {
+      "min_age": 17,
+      "max_age": 25,
+      "gender": "Male",
+      "occupation": ["Student"],
+      "education_level": ["Undergraduate", "Diploma"],
+      "community": "Any",
+      "district": "All"
+    },
+    "documents_required": [
+      "Aadhaar Card",
+      "Government School Study Certificate (Class 6th-12th)",
+      "College / Polytechnic Admission ID Proof",
+      "Bank Account Details (Aadhaar linked)"
+    ],
+    "how_to_apply_en": "1. Register on the Tamil Pudhalvan portal (tamilpudhalvan.tn.gov.in).\n2. Enter school EMIS ID and Aadhaar.\n3. Link your bank savings account.\n4. College administrative office verifies enrollment.\n5. Direct monthly credit of ₹1,000.",
+    "how_to_apply_ta": "1. தமிழ் புதல்வன் இணையதளத்தில் (tamilpudhalvan.tn.gov.in) பதிவு செய்யவும்.\n2. EMIS எண் மற்றும் ஆதார் விவரங்களை உள்ளிடவும்.\n3. வங்கி கணக்கு விவரங்களை இணைக்கவும்.\n4. கல்லூரி நிர்வாகம் மாணவர் சேர்க்கையை சரிபார்க்கும்.\n5. மாதம் ₹1,000 நேரடியாக வங்கிக் கணக்கில் வரவு வைக்கப்படும்.",
+    "official_link": "https://tamilpudhalvan.tn.gov.in",
+    "required_office_type": "esevai",
+    "last_verified_at": "2026-03-18"
+  },
+  {
+    "id": 4,
+    "name_en": "Chief Minister's Comprehensive Health Insurance Scheme (CMCHIS)",
+    "name_ta": "முதலமைச்சரின் விரிவான மருத்துவக் காப்பீட்டுத் திட்டம்",
+    "department": "Health and Family Welfare Department",
+    "category": "health",
+    "benefit_en": "Cashless hospitalization, surgical care, and critical treatments up to ₹5,00,000 per family per year in empaneled government and private hospitals across Tamil Nadu.",
+    "benefit_ta": "ஆண்டிற்கு குடும்பத்திற்கு ₹5,00,000 வரை அரசு மற்றும் தனியார் மருத்துவமனைகளில் இலவச ரொக்கமில்லா மருத்துவ மற்றும் அறுவை சிகிச்சை.",
+    "eligibility_rules": {
+      "max_income": 120000,
+      "district": "All",
+      "ration_card_type": ["PHH", "PHH-AAY", "NPHH"]
+    },
+    "documents_required": [
+      "Smart Ration Card (Family Card)",
+      "Income Certificate issued by Revenue Authority (VAO / Tahsildar)",
+      "Aadhaar Cards of all enrolled family members"
+    ],
+    "how_to_apply_en": "1. Visit your District Collectorate CMCHIS Kiosk or Government District Headquarter Hospital.\n2. Present Smart Ration Card, Income Certificate, and Aadhaar cards.\n3. Capture biometrics (fingerprints & photos) for all family members.\n4. Instant CMCHIS smart card issuance.\n5. Present card at empaneled hospitals for cashless treatment.",
+    "how_to_apply_ta": "1. மாவட்ட ஆட்சியர் அலுவலக CMCHIS மையம் அல்லது மாவட்ட அரசு தலைமை மருத்துவமனைக்கு செல்லவும்.\n2. ஸ்மார்ட் ரேஷன் கார்டு, வருமானச் சான்றிதழ் மற்றும் ஆதாரைச் சமர்ப்பிக்கவும்.\n3. குடும்ப உறுப்பினர்களின் விரல்ரேகை மற்றும் புகைப்படத்தை பதிவு செய்யவும்.\n4. உடனடி காப்பீட்டு அட்டை வழங்கப்படும்.\n5. அங்கீகரிக்கப்பட்ட மருத்துவமனைகளில் இலவச சிகிச்சை பெறலாம்.",
+    "official_link": "https://cmchistn.com",
+    "required_office_type": "collectorate",
+    "last_verified_at": "2026-03-10"
+  },
+  {
+    "id": 5,
+    "name_en": "Chief Minister's Uzhavar Pathukappu Thittam (Farmers Social Security Scheme)",
+    "name_ta": "முதலமைச்சரின் உழவர் பாதுகாப்புத் திட்டம்",
+    "department": "Revenue and Disaster Management Department",
+    "category": "agriculture",
+    "benefit_en": "Comprehensive social security for agricultural labourers and small/marginal farmers including accident relief (up to ₹1,00,000), monthly old-age pension (₹1,000), funeral assistance, and educational aid for children.",
+    "benefit_ta": "விவசாயத் தொழிலாளர்கள் மற்றும் சிறு/குறு விவசாயிகளுக்கு விபத்து நிவாரணம் (₹1,00,000 வரை), முதியோர் ஓய்வூதியம் (₹1,000), இறுதிச்சடங்கு மற்றும் குழந்தைகளின் கல்வி உதவித்தொகை.",
+    "eligibility_rules": {
+      "min_age": 18,
+      "max_age": 65,
+      "occupation": ["Farmer", "Daily Wage / Unorganized Worker"],
+      "district": "All",
+      "community": "Any"
+    },
+    "documents_required": [
+      "Aadhaar Card",
+      "Smart Ration Card",
+      "Farmer Land Ownership (Patta/Chitta) or Agricultural Labourer certificate from VAO",
+      "Bank Account Passbook"
+    ],
+    "how_to_apply_en": "1. Obtain Uzhavar Pathukappu Thittam application from the Taluk Office (Special Tahsildar - Uzhavar Pathukappu).\n2. Get landholding/labour certification from the Village Administrative Officer (VAO).\n3. Submit completed form with documents to the Taluk Tahsildar.\n4. Verification by Revenue Inspector and enrolment into the scheme register.",
+    "how_to_apply_ta": "1. வட்டாட்சியர் அலுவலகத்தில் (உழவர் பாதுகாப்பு திட்ட தனி வட்டாட்சியர்) விண்ணப்பத்தை பெறவும்.\n2. கிராம நிர்வாக அலுவலரிடம் (VAO) விவசாயச் சான்று பெறவும்.\n3. பூர்த்தி செய்த படிவத்தை வட்டாட்சியரிடம் சமர்ப்பிக்கவும்.\n4. வருவாய் ஆய்வாளர் ஆய்வுக்குப் பின் உறுப்பினர் அட்டை வழங்கப்படும்.",
+    "official_link": "https://tn.gov.in/schemes",
+    "required_office_type": "taluk_office",
+    "last_verified_at": "2026-03-12"
+  },
+  {
+    "id": 6,
+    "name_en": "TN Old Age Pension (OAP) Scheme (Indira Gandhi / State Social Security)",
+    "name_ta": "முதியோர் ஓய்வூதியத் திட்டம் (OAP)",
+    "department": "Revenue and Disaster Management Department (Social Security Schemes)",
+    "category": "pension",
+    "benefit_en": "Monthly pension of ₹1,000 paid to destitute senior citizens aged 60 and above who have no means of subsistence or earning family support.",
+    "benefit_ta": "வாழ்வாதாரம் இல்லாத 60 வயதுக்கு மேற்பட்ட முதியவர்களுக்கு மாதம் ₹1,000 முதியோர் ஓய்வூதியம் வழங்கப்படும்.",
+    "eligibility_rules": {
+      "min_age": 60,
+      "max_income": 100000,
+      "occupation": ["Senior Citizen", "Unemployed"],
+      "district": "All",
+      "community": "Any"
+    },
+    "documents_required": [
+      "Aadhaar Card",
+      "Age Proof (Voter ID / Birth Certificate / Medical Certificate)",
+      "Destitute Certificate from Tahsildar / VAO",
+      "Smart Ration Card",
+      "Bank / Post Office Savings Passbook"
+    ],
+    "how_to_apply_en": "1. Apply online via TN e-Sevai portal or submit a physical application to the Taluk Office (Tahsildar - Social Security Schemes).\n2. Revenue Inspector visits the applicant for destitute status and living conditions inquiry.\n3. Special Tahsildar approves pension sanction.\n4. Monthly ₹1,000 credited through Aadhaar Enabled Payment System (AePS) or direct bank transfer.",
+    "how_to_apply_ta": "1. இ-சேவை மையம் மூலம் அல்லது வட்டாட்சியர் அலுவலகத்தில் (சமூகப் பாதுகாப்புத் திட்டங்கள்) விண்ணப்பிக்கவும்.\n2. வருவாய் ஆய்வாளர் நேரில் விசாரணை மேற்கொள்வார்.\n3. தனி வட்டாட்சியர் ஓய்வூதியத்தை அனுமதிப்பார்.\n4. மாதம் ₹1,000 வங்கி கணக்கு அல்லது அஞ்சலகம் மூலம் வரவு வைக்கப்படும்.",
+    "official_link": "https://www.tnesevai.tn.gov.in",
+    "required_office_type": "taluk_office",
+    "last_verified_at": "2026-03-14"
+  },
+  {
+    "id": 7,
+    "name_en": "TN Chief Minister's Solar Powered Green House Scheme (CMSPGHS)",
+    "name_ta": "தமிழக முதலமைச்சரின் சூரிய சக்தியால் இயங்கும் பசுமை வீடுகள் திட்டம்",
+    "department": "Rural Development and Panchayat Raj Department",
+    "category": "housing",
+    "benefit_en": "Free construction of a 300 sq.ft pucca house equipped with solar home lighting systems for rural Below Poverty Line (BPL) families who own house sites.",
+    "benefit_ta": "கிராமப்புற வறுமைக் கோட்டிற்கு கீழ் உள்ள மக்களுக்கு 300 சதுர அடியில் சூரிய ஒளி மின் வசதியுடன் கூடிய இலவச பசுமை வீடு கட்டித் தரப்படும்.",
+    "eligibility_rules": {
+      "min_age": 21,
+      "max_income": 120000,
+      "house_ownership": ["Homeless / Kutcha", "Rented"],
+      "district": "All",
+      "community": "Any",
+      "ration_card_type": ["PHH", "PHH-AAY"]
+    },
+    "documents_required": [
+      "Aadhaar Card",
+      "Smart Ration Card",
+      "Income Certificate from Tahsildar",
+      "House Site Patta (minimum 300 sq.ft land registered in applicant's name)",
+      "BPL / Poverty Line Family Survey Proof"
+    ],
+    "how_to_apply_en": "1. Submit application along with house-site Patta copy to the Village Panchayat President / Panchayat Secretary.\n2. Panchayat Union Block Development Officer (BDO) and Assistant Engineer inspect the site.\n3. Grama Sabha approves the beneficiary list.\n4. District Collector sanctions the green house fund released in stage-wise milestone payments.",
+    "how_to_apply_ta": "1. வீட்டுமனை பட்டா நகலுடன் ஊராட்சி செயலர் அல்லது ஊராட்சி மன்ற தலைவரிடம் விண்ணப்பிக்கவும்.\n2. வட்டார வளர்ச்சி அலுவலர் (BDO) மற்றும் பொறியாளர் இடத்தை ஆய்வு செய்வர்.\n3. கிராம சபையில் பயனாளிகள் பட்டியல் அங்கீகரிக்கப்படும்.\n4. மாவட்ட ஆட்சியர் நிதி ஒப்புதல் வழங்கி கட்டுமானப் பணிகள் தொடங்கப்படும்.",
+    "official_link": "https://tnrd.tn.gov.in",
+    "required_office_type": "municipality",
+    "last_verified_at": "2026-03-11"
+  },
+  {
+    "id": 8,
+    "name_en": "TN Differently Abled Maintenance Allowance Scheme",
+    "name_ta": "மாற்றுத்திறனாளிகள் மாதாந்திர பராமரிப்பு உதவித்தொகை திட்டம்",
+    "department": "Welfare of Differently Abled Persons Department",
+    "category": "pension",
+    "benefit_en": "Monthly maintenance allowance of ₹2,000 directly transferred to severely differently-abled persons (mental retardation, cerebral palsy, muscular dystrophy, or 75%+ locomotory disability).",
+    "benefit_ta": "கடும் மாற்றுத்திறனாளிகள் மற்றும் மனவளர்ச்சி குன்றியவர்களுக்கு மாதம் ₹2,000 பராமரிப்பு உதவித்தொகை வழங்கப்படும்.",
+    "eligibility_rules": {
+      "disability": "Yes",
+      "district": "All",
+      "community": "Any"
+    },
+    "documents_required": [
+      "National Unique Disability ID (UDID) Card or Medical Disability Certificate (minimum 40%-75% disability depending on category)",
+      "Aadhaar Card",
+      "Smart Ration Card",
+      "Bank Account Passbook (with joint photograph of guardian if applicable)"
+    ],
+    "how_to_apply_en": "1. Apply at the District Differently Abled Welfare Office (DDAWO) situated within the District Collectorate.\n2. Submit medical board disability certificate and UDID.\n3. Verification by District Differently Abled Welfare Officer.\n4. Direct monthly pension credit of ₹2,000 into bank account.",
+    "how_to_apply_ta": "1. மாவட்ட ஆட்சியர் அலுவலக வளாகத்தில் உள்ள மாவட்ட மாற்றுத்திறனாளிகள் நல அலுவலகத்தில் விண்ணப்பிக்கவும்.\n2. மருத்துவக் குழு சான்றிதழ் மற்றும் UDID அட்டையை சமர்ப்பிக்கவும்.\n3. மாவட்ட மாற்றுத்திறனாளிகள் நல அலுவலர் ஆய்வு செய்வார்.\n4. மாதம் ₹2,000 வங்கி கணக்கில் வரவு வைக்கப்படும்.",
+    "official_link": "https://scd.tn.gov.in",
+    "required_office_type": "collectorate",
+    "last_verified_at": "2026-03-16"
+  },
+  {
+    "id": 9,
+    "name_en": "Naan Mudhalvan Skill Development & Career Guidance Scheme",
+    "name_ta": "நான் முதல்வன் திறன் மேம்பாட்டுத் திட்டம்",
+    "department": "Tamil Nadu Skill Development Corporation (TNSDC)",
+    "category": "education",
+    "benefit_en": "Free industry-aligned software, engineering, BFSI, biotechnology, and competitive exam skill bootcamps with corporate hiring and certification vouchers.",
+    "benefit_ta": "இளைஞர்களுக்கு தொழில்முறை கணினி பயிற்சி, ஐடி சான்றிதழ்கள், திறன் பயிற்சி மற்றும் வேலைவாய்ப்பு வழிகாட்டுதல் இலவசமாக வழங்கப்படுகிறது.",
+    "eligibility_rules": {
+      "min_age": 18,
+      "max_age": 35,
+      "occupation": ["Student", "Job Seeker", "Unemployed"],
+      "education_level": ["Undergraduate", "Postgraduate", "Diploma", "12th Pass"],
+      "district": "All"
+    },
+    "documents_required": [
+      "Aadhaar Card",
+      "Educational Degree / Diploma Marksheet or Student College ID",
+      "Mobile number and Email ID for LMS portal access"
+    ],
+    "how_to_apply_en": "1. Visit the portal naanmudhalvan.tn.gov.in.\n2. Register using mobile OTP and Aadhaar details.\n3. Select your skill track (Software Engineering, Data Science, Logistics, Electric Vehicles).\n4. Attend online/in-person classes conducted in colleges and District Employment Centres.\n5. Participate in exclusive mega placement drives.",
+    "how_to_apply_ta": "1. naanmudhalvan.tn.gov.in இணையதளத்தில் பதிவு செய்யவும்.\n2. மொபைல் எண் மற்றும் ஆதார் மூலம் உள்நுழையவும்.\n3. நீங்கள் விரும்பும் பயிற்சிப் பிரிவைத் தேர்ந்தெடுக்கவும்.\n4. மாவட்ட வேலைவாய்ப்பு அலுவலகங்கள் அல்லது கல்லூரிகளில் பயிற்சி பெறவும்.\n5. அரசு வேலைவாய்ப்பு முகாம்களில் பங்கேற்கவும்.",
+    "official_link": "https://naanmudhalvan.tn.gov.in",
+    "required_office_type": "esevai",
+    "last_verified_at": "2026-03-22"
+  },
+  {
+    "id": 10,
+    "name_en": "Dr. Muthulakshmi Reddy Maternity Benefit Scheme",
+    "name_ta": "டாக்டர் முத்துலட்சுமி ரெட்டி மகப்பேறு நிதி உதவித் திட்டம்",
+    "department": "Health and Family Welfare Department",
+    "category": "women",
+    "benefit_en": "Financial assistance of ₹18,000 (including ₹14,000 cash in 5 installments and 2 Amma Maternity Nutrition Kits valued at ₹4,000) for pregnant mothers in poor families.",
+    "benefit_ta": "கர்ப்பிணி தாய்மார்களுக்கு ₹14,000 பண உதவி மற்றும் ₹4,000 மதிப்புள்ள ஊட்டச்சத்து பெட்டகம் உட்பட மொத்தம் ₹18,000 மகப்பேறு உதவி.",
+    "eligibility_rules": {
+      "min_age": 19,
+      "gender": "Female",
+      "max_income": 120000,
+      "children_count_max": 2,
+      "district": "All",
+      "community": "Any"
+    },
+    "documents_required": [
+      "Aadhaar Card of pregnant mother and husband",
+      "Smart Ration Card",
+      "Mother and Child Tracking System (RCH ID) / PICME Registration Number",
+      "Bank Account Passbook (single account in mother's name)"
+    ],
+    "how_to_apply_en": "1. Register pregnancy within 12 weeks with the Village Health Nurse (VHN) or Urban Health Nurse (UHN).\n2. Obtain 12-digit PICME registration number at Primary Health Centre (PHC).\n3. Complete scheduled antenatal checkups at Govt Hospital / PHC.\n4. Cash installments credited directly into bank account via DBT alongside delivery of nutrition kits.",
+    "how_to_apply_ta": "1. கர்ப்பமடைந்த 12 வாரங்களுக்குள் கிராம சுகாதார செவிலியரிடம் (VHN) பதிவு செய்யவும்.\n2. ஆரம்ப சுகாதார நிலையத்தில் (PHC) 12 இலக்க PICME எண் பெறவும்.\n3. அரசு மருத்துவமனையில் பரிசோதனைகளை முடித்து பிரசவம் பார்க்கவும்.\n4. 5 தவணைகளில் ₹18,000 நிதி மற்றும் அம்மா ஊட்டச்சத்து பெட்டகம் வழங்கப்படும்.",
+    "official_link": "https://picme.tn.gov.in",
+    "required_office_type": "esevai",
+    "last_verified_at": "2026-03-19"
+  },
+  {
+    "id": 11,
+    "name_en": "Moovalur Ramamirtham Ammaiyar Memorial Marriage Assistance Scheme",
+    "name_ta": "மூவலூர் ராமாமிர்தம் அம்மையார் நினைவு திருமண உதவித் திட்டம்",
+    "department": "Social Welfare and Women Empowerment Department",
+    "category": "women",
+    "benefit_en": "Financial assistance of ₹25,000 (for 10th pass) or ₹50,000 (for degree/diploma holders) plus 8 grams (1 sovereign) 22-carat gold coin for Thirumangalyam for poor brides.",
+    "benefit_ta": "ஏழை மணப்பெண்களுக்கு ₹25,000 (10-ஆம் வகுப்பு) அல்லது ₹50,000 (பட்டதாரிகள்) மற்றும் திருமாங்கல்யத்திற்கு 8 கிராம் (1 சவரன்) தங்க நாணயம்.",
+    "eligibility_rules": {
+      "min_age": 18,
+      "gender": "Female",
+      "max_income": 72000,
+      "marital_status": ["Unmarried"],
+      "district": "All",
+      "community": "Any"
+    },
+    "documents_required": [
+      "Bride's 10th Marksheet or Degree/Diploma Certificate",
+      "Income Certificate from Tahsildar (below ₹72,000/year)",
+      "Marriage Invitation Card and Age Proof of Bride (minimum 18) and Groom (minimum 21)",
+      "Smart Ration Card and Aadhaar Card"
+    ],
+    "how_to_apply_en": "1. Apply through the local e-Sevai centre or Block Development Office (Social Welfare Extension Officer) at least 40 days prior to the wedding date.\n2. Submit academic certificates, income certificate, and wedding invitation.\n3. Field verification conducted by Social Welfare Extension Officer.\n4. Gold coin and cheque / DBT handed over before marriage.",
+    "how_to_apply_ta": "1. திருமணத்திற்கு 40 நாட்களுக்கு முன்பாக இ-சேவை மையம் அல்லது வட்டார வளர்ச்சி அலுவலகத்தில் (BDO) விண்ணப்பிக்கவும்.\n2. கல்விச் சான்றிதழ், வருமானச் சான்றிதழ் மற்றும் திருமண அழைப்பிதழை இணைக்கவும்.\n3. சமூக நல விரிவாக்க அலுவலர் கள ஆய்வு மேற்கொள்வார்.\n4. திருமணத்திற்கு முன் தங்க நாணயம் மற்றும் நிதி உதவி வழங்கப்படும்.",
+    "official_link": "https://tn.gov.in/schemes",
+    "required_office_type": "taluk_office",
+    "last_verified_at": "2026-03-10"
+  },
+  {
+    "id": 12,
+    "name_en": "Tamil Nadu Destitute Widow Pension Scheme",
+    "name_ta": "தமிழ்நாடு ஆதரவற்ற விதவை ஓய்வூதியத் திட்டம்",
+    "department": "Revenue and Disaster Management Department (Social Security Schemes)",
+    "category": "pension",
+    "benefit_en": "Monthly pension of ₹1,000 paid to destitute widows with no family support or sufficient income.",
+    "benefit_ta": "வருமானம் மற்றும் குடும்ப ஆதரவு இல்லாத ஆதரவற்ற விதவைப் பெண்களுக்கு மாதம் ₹1,000 மாதாந்திர ஓய்வூதியம்.",
+    "eligibility_rules": {
+      "min_age": 18,
+      "gender": "Female",
+      "marital_status": ["Widowed"],
+      "max_income": 100000,
+      "district": "All",
+      "community": "Any"
+    },
+    "documents_required": [
+      "Aadhaar Card",
+      "Husband's Death Certificate",
+      "Destitute Widow Certificate issued by Tahsildar / Revenue Divisional Officer (RDO)",
+      "Smart Ration Card",
+      "Bank Savings Passbook"
+    ],
+    "how_to_apply_en": "1. Apply via e-Sevai or at the Taluk Office (Tahsildar - Social Security Schemes).\n2. Submit husband's death certificate and legal heir certificate.\n3. Revenue Inspector conducts field inquiry to verify destitute status.\n4. Tahsildar issues sanction order for monthly pension credit.",
+    "how_to_apply_ta": "1. இ-சேவை மையம் அல்லது வட்டாட்சியர் அலுவலகத்தில் விண்ணப்பிக்கவும்.\n2. கணவரின் இறப்புச் சான்றிதழ் மற்றும் வாரிசுச் சான்றிதழை சமர்ப்பிக்கவும்.\n3. வருவாய் ஆய்வாளர் விசாரணை நடத்தி அறிக்கை அளிப்பார்.\n4. வட்டாட்சியர் ஒப்புதலுக்குப் பின் வங்கி கணக்கில் மாதம் ₹1,000 செலுத்தப்படும்.",
+    "official_link": "https://www.tnesevai.tn.gov.in",
+    "required_office_type": "taluk_office",
+    "last_verified_at": "2026-03-14"
+  },
+  {
+    "id": 13,
+    "name_en": "TN Chief Minister's Free Bicycle Scheme for School Students",
+    "name_ta": "தமிழக முதலமைச்சரின் அரசுப் பள்ளி மாணவர்களுக்கான இலவச மிதிவண்டித் திட்டம்",
+    "department": "Backward Classes, Most Backward Classes and Minorities Welfare / School Education",
+    "category": "education",
+    "benefit_en": "Free bicycles provided to all boys and girls studying in Class 11 in Tamil Nadu Government and Government-aided higher secondary schools.",
+    "benefit_ta": "அரசு மற்றும் அரசு உதவிபெறும் மேல்நிலைப் பள்ளிகளில் 11-ஆம் வகுப்பு படிக்கும் அனைத்து மாணவ, மாணவியருக்கும் இலவச மிதிவண்டி வழங்கப்படும்.",
+    "eligibility_rules": {
+      "min_age": 15,
+      "max_age": 18,
+      "occupation": ["Student"],
+      "education_level": ["10th Pass", "12th Pass", "Below 10th"],
+      "district": "All",
+      "community": "Any"
+    },
+    "documents_required": [
+      "Aadhaar Card",
+      "Class 11 School Enrollment Proof / School ID Card",
+      "EMIS Student Registration Number"
+    ],
+    "how_to_apply_en": "1. No individual portal application required.\n2. School Headmaster prepares student list via EMIS.\n3. Department of Backward Classes & Minorities delivers assembled bicycles directly to schools.\n4. Distributed during school welfare ceremonies.",
+    "how_to_apply_ta": "1. தனியாக விண்ணப்பிக்கத் தேவையில்லை.\n2. பள்ளி தலைமை ஆசிரியர் EMIS மூலம் மாணவர் பட்டியலை தயாரிப்பார்.\n3. மிதிவண்டிகள் நேரடியாக பள்ளிக்கு அனுப்பி வைக்கப்படும்.\n4. பள்ளியிலேயே மாணவர்களுக்கு இலவசமாக வழங்கப்படும்.",
+    "official_link": "https://www.tn.gov.in/schemes",
+    "required_office_type": "esevai",
+    "last_verified_at": "2026-03-12"
+  },
+  {
+    "id": 14,
+    "name_en": "Tamil Nadu Antyodaya Anna Yojana (AAY) Ration Subsidy Scheme",
+    "name_ta": "தமிழ்நாடு அந்தியோதயா அன்ன யோஜனா (AAY) ரேஷன் திட்டம்",
+    "department": "Food, Civil Supplies and Consumer Protection Department",
+    "category": "agriculture",
+    "benefit_en": "Supply of 35 kg of free rice per month along with subsidized pulses, edible oil, and sugar for the poorest of the poor households.",
+    "benefit_ta": "மிகவும் ஏழை குடும்பங்களுக்கு மாதம் 35 கிலோ இலவச அரிசி, மலிவு விலையில் பருப்பு, பாமாயில் மற்றும் சர்க்கரை வழங்கப்படுகிறது.",
+    "eligibility_rules": {
+      "max_income": 60000,
+      "ration_card_type": ["PHH-AAY"],
+      "district": "All",
+      "community": "Any"
+    },
+    "documents_required": [
+      "Aadhaar Card of all family members",
+      "Income Certificate from Tahsildar (annual income below ₹60,000)",
+      "Smart Ration Card (converted to AAY category)",
+      "Electricity Consumer number"
+    ],
+    "how_to_apply_en": "1. Apply for ration card category modification at the nearest e-Sevai centre or TNPDS portal (tnpds.gov.in).\n2. Taluk Supply Officer (TSO) inspects dwelling and family economic status.\n3. Civil Supplies department issues AAY endorsement on Smart Ration Card.\n4. Draw monthly 35kg free food grains from your designated Fair Price Shop (Ration Shop).",
+    "how_to_apply_ta": "1. இ-சேவை மையம் அல்லது tnpds.gov.in மூலம் குடும்ப அட்டை பிரிவு மாற்றத்திற்கு விண்ணப்பிக்கவும்.\n2. வட்ட வழங்கல் அலுவலர் (TSO) இல்லத்திற்கு நேரில் வந்து ஆய்வு செய்வார்.\n3. ஸ்மார்ட் ரேஷன் கார்டில் AAY பிரிவு மாற்றம் செய்யப்படும்.\n4. உங்கள் நியாயவிலைக் கடையில் (Ration Shop) மாதம் 35 கிலோ இலவச அரிசி பெறலாம்.",
+    "official_link": "https://www.tnpds.gov.in",
+    "required_office_type": "ration_shop",
+    "last_verified_at": "2026-03-21"
+  }
+]
