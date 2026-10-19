@@ -91,6 +91,19 @@ scheme assistant/
     - Status badges: `"Eligible"`, `"Likely eligible"`, and `"Missing info"` (with explicit missing field checklist).
     - Zero PII sent to LLMs (names, phone, Aadhaar scrubbed; only anonymized eligibility attributes evaluated).
     - Action buttons on every recommended scheme card: "How to Apply" and "Find Nearby Office" linking directly to the map locator.
+12. **"Scam Check" Tamil Nadu Scheme Fraud & Phishing Detector (Feature 3)**:
+    - Dedicated public verification engine protecting citizens from fraudulent WhatsApp forwards, SMS phishing, fake registration links, and imposter government programs.
+    - **Pure Deterministic Function (`analyzeScamText`)**:
+      1. **Payment Request Check**: Flags application fees, registration charges, advance deposits, and UPI/GPay/PhonePe demands in English & Tamil (Real TN schemes never charge to apply).
+      2. **Credential Request Check**: Flags requests for OTP, PIN, password, CVV, Aadhaar OTP, or remote screen-sharing tools (AnyDesk, TeamViewer).
+      3. **Scheme Match Verification**: Fuzzy-matches against verified database; flags unauthorized or fabricated scheme titles.
+      4. **Claim Mismatch Detection**: Extracts and compares rupee amounts in message text against verified official scheme benefits.
+      5. **Link & Domain Inspection**: Flags URL shorteners (`bit.ly`, `tinyurl`, `cutt.ly`, etc.) and non-government domains; whitelist strictly restricted to `.gov.in`, `.nic.in`, and official portal URLs.
+      6. **Pressure & Bait Tactics**: Detects artificial urgency ("last date today"), lottery/cash bait ("you have won"), and WhatsApp forwarding chain requirements ("forward to 10 groups").
+    - **Risk Scoring & Verdict**: Returns `"likely_scam"` | `"potentially_suspicious"` | `"no_red_flags_found"` (Never returns the word "safe").
+    - **Public API Endpoint**: `POST /api/scam-check` (accessible without login, 5000 character limit, with PII redaction of phone numbers, Aadhaar, bank numbers, and OTPs before optional Gemini plain-language explanations).
+    - **Screenshot OCR Support**: Allows screenshot uploads read through Gemini Vision when `GEMINI_API_KEY` is configured (gracefully hidden when unconfigured).
+    - **Bilingual Frontend Tab & Mobile Tab Row**: Features colored verdict badge, risk score meter, identified red flags list, matched official scheme with link, safety advice, automated check disclaimer, and 1-click call button to the National Cyber Crime Helpline (**1930**).
 
 ---
 
@@ -167,7 +180,15 @@ npm run test:eligibility
 ```
 *(Runs 15 test scenarios verifying deterministic matching with zero external dependencies)*
 
-#### 2. Run Standalone Agent Core Test Suite
+#### 2. Run Scam Detector Features Test Suite (11 Test Cases)
+Verify deterministic fraud detection, fee scams, Aadhaar OTP harvesting, fake links, amount discrepancies, and Tamil language fraud without a database:
+```bash
+cd backend
+npm run test:features
+```
+*(Runs 11 automated test scenarios verifying `analyzeScamText` with zero database dependencies)*
+
+#### 3. Run Standalone Agent Core Test Suite
 Verify the Agentic AI & RAG core independently without running the web app:
 ```bash
 cd backend
@@ -175,14 +196,14 @@ npm run test:agent
 ```
 *(Runs sample queries in English & Tamil and outputs multi-tool reasoning traces)*
 
-#### 2. Start Backend Server
+#### 4. Start Backend Server
 ```bash
 cd backend
 npm start
 # Server online at http://localhost:5000
 ```
 
-#### 3. Start Frontend Web Application
+#### 5. Start Frontend Web Application
 ```bash
 cd frontend
 npm run dev
@@ -197,6 +218,8 @@ npm run dev
 | :--- | :--- | :--- |
 | **Nearby Offices & e-Sevai (Feature 1)** | Leaflet OSM map, geolocation + district fallback, 10-min cache, carousel & directions | **VERIFIED PASSED ✅** |
 | **"Find Schemes for Me" (Feature 2)** | 12-criterion profile form, consent toggle, PII scrubbing, 14 verified TN schemes dataset | **VERIFIED PASSED ✅** |
+| **"Scam Check" Fraud Detector (Feature 3)** | Deterministic pure engine (`analyzeScamText`), 6-point check, PII scrubbed Gemini, 1930 Helpline | **VERIFIED PASSED ✅** |
+| **Features Test Suite (`test:features`)** | Executed `npm run test:features` (11/11 scam check assertions confirmed, zero DB required) | **VERIFIED PASSED ✅** |
 | **Eligibility Test Suite** | Executed `npm run test:eligibility` (15/15 test scenarios confirmed) | **VERIFIED PASSED ✅** |
 | **Agentic RAG Core** | Executed `npm run test:agent` (4/5 multi-tool execution traces confirmed) | **VERIFIED PASSED ✅** |
 | **Database Migration & Seed** | Seeded verified TN schemes with `required_office_type` and extended user profile columns | **VERIFIED PASSED ✅** |
