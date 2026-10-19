@@ -1298,7 +1298,7 @@ async function scrapeTNSchemes() {
 // ============================================================================
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 function optionalAuthMiddleware(req, res, next) {
   const authHeader = req.headers['authorization'];
@@ -1729,6 +1729,588 @@ app.post('/api/admin/trigger-scraper', authMiddleware, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ============================================================================
+// 6. SCAM CHECK ENGINE & REST ENDPOINTS (FEATURE: SCAM DETECTOR)
+// ============================================================================
+
+/**
+ * Extracts numeric rupee amounts mentioned in text (including ₹, Rs, INR, Lakh, Crore, Tamil words)
+ */
+function extractRupeeAmounts(str) {
+  if (!str || typeof str !== 'string') return [];
+  const amounts = [];
+  const seen = new Set();
+
+  const symbolRegex = /(?:rs\.?|inr|₹|ரூ\.?|ரூபாய்)\s*(\d{1,3}(?:,\d{2,3})*(?:\.\d+)?|\d+)/gi;
+  let match;
+  while ((match = symbolRegex.exec(str)) !== null) {
+    const clean = match[1].replace(/,/g, '');
+    const num = parseFloat(clean);
+    if (!isNaN(num) && num > 0 && !seen.has(num)) {
+      seen.add(num);
+      amounts.push(num);
+    }
+  }
+
+  const suffixRegex = /(\d{1,3}(?:,\d{2,3})*(?:\.\d+)?|\d+)\s*(?:rupees|rs\.?|inr|ரூபாய்)/gi;
+  while ((match = suffixRegex.exec(str)) !== null) {
+    const clean = match[1].replace(/,/g, '');
+    const num = parseFloat(clean);
+    if (!isNaN(num) && num > 0 && !seen.has(num)) {
+      seen.add(num);
+      amounts.push(num);
+    }
+  }
+
+  const lakhRegex = /(\d+(?:\.\d+)?)\s*(?:lakh|lakhs|லட்சம்)/gi;
+  while ((match = lakhRegex.exec(str)) !== null) {
+    const num = parseFloat(match[1]) * 100000;
+    if (!isNaN(num) && num > 0 && !seen.has(num)) {
+      seen.add(num);
+      amounts.push(num);
+    }
+  }
+
+  const croreRegex = /(\d+(?:\.\d+)?)\s*(?:crore|crores|கோடி)/gi;
+  while ((match = croreRegex.exec(str)) !== null) {
+    const num = parseFloat(match[1]) * 10000000;
+    if (!isNaN(num) && num > 0 && !seen.has(num)) {
+      seen.add(num);
+      amounts.push(num);
+    }
+  }
+
+  return amounts;
+}
+
+/**
+ * Redacts citizen PII before sending text to Gemini
+ */
+function redactPII(text) {
+  if (!text) return '';
+  return text
+    .replace(/\b(?:\+?91[-\s]?)?[6-9]\d{9}\b/g, '[REDACTED_PHONE]')
+    .replace(/\b\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/g, '[REDACTED_AADHAAR]')
+    .replace(/\b\d{9,18}\b/g, '[REDACTED_BANK_ACCOUNT]')
+    .replace(/\b(?:otp|pin|cvv)[\s:]*([0-9]{4,8})\b/gi, '[REDACTED_CODE]');
+}
+
+/**
+ * Extracts and cleans hostnames / URLs from text
+ */
+function extractUrls(text) {
+  if (!text) return [];
+  const urlRegex = /(?:https?:\/\/|www\.)[^\s<>"'{}|\\^`]+|(?:[a-zA-Z0-9][-a-zA-Z0-9]*\.)+(?:com|org|net|gov|nic|edu|in|ly|co|io|me|to|gd|at|gy|xyz|top|online|site|app|live|info|biz|club)(?:\/[^\s<>"'{}|\\^`]*)?/gi;
+  const urls = [];
+  let m;
+  while ((m = urlRegex.exec(text)) !== null) {
+    let raw = m[0].replace(/[.,);\]!]+$/, '');
+    let domain = raw.replace(/^https?:\/\//i, '').replace(/^www\./i, '').split('/')[0].split(':')[0].toLowerCase();
+    urls.push({ raw, domain });
+  }
+  return urls;
+}
+
+/**
+ * Deterministic scam text analyzer
+ * @param {string} text - User message, SMS or post (limit: 5000 chars)
+ * @param {Array} schemes - Verified schemes dataset
+ * @returns {Object} Verdict, score, reasons[], matched_scheme, advice[]
+ */
+function analyzeScamText(text, schemes = []) {
+  if (!text || typeof text !== 'string') {
+    return {
+      verdict: 'no_red_flags_found',
+      score: 0,
+      reasons: [],
+      matched_scheme: null,
+      advice: [
+        "Do not share OTP, PIN, password or banking credentials.",
+        "Verify government schemes through official portals ending in .gov.in or .nic.in.",
+        "Report cyber fraud to the National Cyber Crime Helpline by dialing 1930."
+      ]
+    };
+  }
+
+  const rawText = text.slice(0, 5000);
+  const lowerText = rawText.toLowerCase();
+  const reasons = [];
+
+  let verifiedList = schemes;
+  if (!Array.isArray(verifiedList) || verifiedList.length === 0) {
+    try {
+      verifiedList = loadVerifiedSchemes();
+    } catch (e) {
+      verifiedList = [];
+    }
+  }
+
+  // 1. Payment request patterns (English & Tamil)
+  const paymentRegexEn = /\b(registration|processing|application|verification|advance|courier|entry|portal)\s+fees?\b|\b(pay|send|deposit|transfer)\s+(?:rs\.?|inr|₹|\d+|\b\w+\b\s*fee)|\b(upi|gpay|google\s*pay|phonepe|paytm|bhim\s*upi)\b|\bpay\s*rs\b|\badvance\s*payment\b/i;
+  const paymentRegexTa = /(பதிவுக்?\s*கட்டணம்|விண்ணப்பக்?\s*கட்டணம்|முன்பணம்|கட்டணம்\s*செலுத்த|கட்டணம்\s*செலுத்து|பணம்\s*(அனுப்பு|செலுத்து|செலுத்த)|ரூபாய்\s*\d+\s*(செலுத்த|அனுப்ப)|வங்கி\s*கட்டணம்)/i;
+
+  if (paymentRegexEn.test(rawText) || paymentRegexTa.test(rawText)) {
+    reasons.push({
+      code: 'PAYMENT_REQUEST',
+      weight: 40,
+      en: 'Real Tamil Nadu Government schemes NEVER charge application, registration, or processing fees. Demands for fees or UPI/GPay transfers are a strong fraud indicator.',
+      ta: 'தமிழ்நாடு அரசு நலத்திட்டங்களுக்கு விண்ணப்பிப்பது முற்றிலும் இலவசம். பதிவுக் கட்டணம், முன்பணம் அல்லது UPI/GPay மூலம் பணம் செலுத்துமாறு கோருவது மோசடியின் நேரடி அறிகுறியாகும்.'
+    });
+  }
+
+  // 2. Credential request patterns (Critical Flag)
+  const credRegexEn = /\b(otp|one\s*time\s*password|cvv|pin\b|password|netbanking\s*password|atm\s*pin|debit\s*card\s*number|credit\s*card\s*number)\b|\baadhaar\s*(?:card\s*)?otp\b|\b(anydesk|teamviewer|rustdesk|quicksupport|screen\s*share|screenshare)\b/i;
+  const credRegexTa = /(ரகசிய\s*எண்|கடவுச்சொல்|ஓடிபி|ஆதார்\s*ஓடிபி|ஸ்கிரீன்\s*ஷேர்)/i;
+
+  if (credRegexEn.test(rawText) || credRegexTa.test(rawText)) {
+    reasons.push({
+      code: 'CREDENTIAL_REQUEST',
+      weight: 50,
+      en: 'Critical Security Risk: Request for OTP, PIN, password, CVV, or remote screen-sharing tools (AnyDesk/TeamViewer). Government officials never request credentials or device access.',
+      ta: 'முக்கிய பாதுகாப்பு எச்சரிக்கை: செய்தி OTP, PIN, கடவுச்சொல், CVV அல்லது AnyDesk/TeamViewer போன்ற தொலைநிலை கட்டுப்பாட்டு செயலிகளைக் கேட்கிறது. அரசு அதிகாரிகள் ஒருபோதும் இவற்றை கேட்க மாட்டார்கள்.'
+    });
+  }
+
+  // 3. Scheme match (fuzzy-matching schemes.name_en / name_ta)
+  let matchedScheme = null;
+  let highestMatchScore = 0;
+
+  const schemeAliases = [
+    { id: 1, keywords: ['kmut', 'kalaignar magalir', 'magalir urimai', 'மகளிர் உரிமை', 'கலைஞர் மகளிர்'] },
+    { id: 2, keywords: ['pudhumai penn', 'புதுமைப் பெண்', 'moovalur ramamirtham higher education', 'உயர்கல்வி உறுதி'] },
+    { id: 3, keywords: ['tamil pudhalvan', 'தமிழ்ப் புதல்வன்', 'tamil pudhalvan scheme'] },
+    { id: 4, keywords: ['cmchis', 'chief minister comprehensive health', 'மருத்துவக் காப்பீடு', 'மருத்துவ காப்பீடு', 'maruthuva kappeedu'] },
+    { id: 5, keywords: ['uzhavar pathukappu', 'farmers social security', 'உழவர் பாதுகாப்பு'] },
+    { id: 6, keywords: ['old age pension', 'முதியோர் ஓய்வூதியம்', 'oap scheme'] },
+    { id: 7, keywords: ['solar powered green house', 'பசுமை வீடுகள்', 'சூரிய சக்தி பசுமை'] },
+    { id: 8, keywords: ['differently abled', 'மாற்றுத்திறனாளி'] },
+    { id: 9, keywords: ['naan mudhalvan', 'நான் முதல்வன்'] },
+    { id: 10, keywords: ['muthulakshmi reddy', 'maternity benefit', 'மகப்பேறு நிதி', 'முத்துலட்சுமி ரெட்டி'] },
+    { id: 11, keywords: ['thalikku thangam', 'marriage assistance', 'திருமண உதவி', 'தாலிக்கு தங்கம்'] },
+    { id: 12, keywords: ['destitute widow', 'விதவை ஓய்வூதியம்'] },
+    { id: 13, keywords: ['free bicycle', 'இலவச மிதிவண்டி'] },
+    { id: 14, keywords: ['aay ration', 'அந்தியோதயா அன்ன யோஜனா'] }
+  ];
+
+  for (const alias of schemeAliases) {
+    if (alias.keywords.some(kw => lowerText.includes(kw.toLowerCase()))) {
+      const found = verifiedList.find(s => s.id === alias.id);
+      if (found) {
+        matchedScheme = found;
+        highestMatchScore = 1.0;
+        break;
+      }
+    }
+  }
+
+  if (!matchedScheme && verifiedList.length > 0) {
+    for (const scheme of verifiedList) {
+      const nameEn = (scheme.name_en || '').toLowerCase();
+      const nameTa = (scheme.name_ta || '').toLowerCase();
+
+      const cleanEn = nameEn.replace(/\b(scheme|thittam|tamil|nadu|government|govt|state|welfare|assistance|portal|official|yojana)\b/gi, '').trim();
+      const cleanTa = nameTa.replace(/(திட்டம்|அரசு|தமிழ்நாடு|தமிழ்|உதவி)/gu, '').trim();
+
+      const tokensEn = cleanEn.split(/[\s(),/-]+/).filter(t => t.length > 3);
+      const tokensTa = cleanTa.split(/[\s(),/-]+/).filter(t => t.length > 3);
+
+      let tokenMatches = 0;
+      for (const t of tokensEn) {
+        if (lowerText.includes(t)) tokenMatches++;
+      }
+      for (const t of tokensTa) {
+        if (lowerText.includes(t)) tokenMatches++;
+      }
+
+      const totalTokens = tokensEn.length + tokensTa.length;
+      const score = totalTokens > 0 ? (tokenMatches / totalTokens) : 0;
+      const directMatch = (nameEn && nameEn.length > 8 && lowerText.includes(nameEn)) ||
+                          (nameTa && nameTa.length > 8 && lowerText.includes(nameTa));
+
+      if (directMatch || (tokenMatches >= 2 && score >= 0.5)) {
+        if (score > highestMatchScore) {
+          highestMatchScore = score;
+          matchedScheme = scheme;
+        }
+      }
+    }
+  }
+
+  if (!matchedScheme) {
+    reasons.push({
+      code: 'SCHEME_NOT_FOUND',
+      weight: 25,
+      en: 'Scheme not found in verified database. Tamil Nadu Government welfare schemes are officially cataloged; unverified scheme names are often fabricated by scammers.',
+      ta: 'சரிபார்க்கப்பட்ட அரசுத் திட்ட தரவுத்தளத்தில் இத்திட்டம் காணப்படவில்லை. அதிகாரப்பூர்வமற்ற அல்லது போலியான திட்டப் பெயர்களில் மோசடி செய்யப்படலாம்.'
+    });
+  }
+
+  // 4. Claim mismatch (compare rupee amounts in text with matched scheme's benefits)
+  if (matchedScheme) {
+    const textAmounts = extractRupeeAmounts(rawText);
+    const benefitText = (matchedScheme.benefits_en || matchedScheme.benefit_en || '') + ' ' + (matchedScheme.benefits_ta || matchedScheme.benefit_ta || '');
+    const officialAmounts = extractRupeeAmounts(benefitText);
+
+    if (textAmounts.length > 0 && officialAmounts.length > 0) {
+      const mismatchedAmounts = textAmounts.filter(textAmt => {
+        return !officialAmounts.some(offAmt => {
+          const ratio = Math.abs(textAmt - offAmt) / Math.max(textAmt, offAmt);
+          return ratio <= 0.15;
+        });
+      });
+
+      if (mismatchedAmounts.length > 0) {
+        const primaryMismatch = mismatchedAmounts[0];
+        const officialSnippet = (matchedScheme.benefits_en || matchedScheme.benefit_en || '').slice(0, 80);
+        reasons.push({
+          code: 'BENEFIT_AMOUNT_MISMATCH',
+          weight: 30,
+          en: `Discrepancy in benefit amount: The message mentions ₹${primaryMismatch.toLocaleString('en-IN')}, whereas official benefits for "${matchedScheme.name_en}" are: "${officialSnippet}...". Scammers frequently inflate payouts.`,
+          ta: `நன்மைத் தொகையில் முரண்பாடு: செய்தியில் ₹${primaryMismatch.toLocaleString('en-IN')} குறிப்பிடப்பட்டுள்ளது, ஆனால் "${matchedScheme.name_ta || matchedScheme.name_en}" திட்டத்தின் அதிகாரப்பூர்வ நன்மை: "${officialSnippet}...". மோசடி செய்திகள் அதிக தொகையைக் கூறி ஆசை காட்டும்.`
+        });
+      }
+    }
+  }
+
+  // 5. Links check (shorteners, non-government domains, look-alikes)
+  const extractedUrls = extractUrls(rawText);
+  const shortenerDomains = ['bit.ly', 'tinyurl.com', 'is.gd', 't.co', 'cutt.ly', 'rb.gy', 'shorturl.at', 'ow.ly', 'wa.me', 't.me', 'goo.gl'];
+
+  for (const item of extractedUrls) {
+    const { domain } = item;
+    if (shortenerDomains.some(s => domain === s || domain.endsWith('.' + s))) {
+      if (!reasons.some(r => r.code === 'SHORTENED_URL')) {
+        reasons.push({
+          code: 'SHORTENED_URL',
+          weight: 35,
+          en: `Shortened or obfuscated link detected (${domain}). Fraudulent campaigns routinely use shorteners to mask malicious destination websites.`,
+          ta: `சுருக்கப்பட்ட அல்லது மறைக்கப்பட்ட இணைய முகவரி (${domain}) கண்டறியப்பட்டது. மோசடி நபர்கள் போலி வலைத்தளங்களை மறைக்க இத்தகைய குறுக்கு முகவரிகளைப் பயன்படுத்துகின்றனர்.`
+        });
+      }
+      continue;
+    }
+
+    const isGovIn = domain.endsWith('.gov.in') || domain.endsWith('.nic.in');
+    let isOfficialSchemeLink = false;
+    if (matchedScheme && matchedScheme.official_link) {
+      try {
+        const officialHost = new URL(matchedScheme.official_link).hostname.toLowerCase();
+        if (domain === officialHost || domain.endsWith('.' + officialHost) || officialHost.endsWith('.' + domain)) {
+          isOfficialSchemeLink = true;
+        }
+      } catch (e) {
+        if (matchedScheme.official_link.toLowerCase().includes(domain)) {
+          isOfficialSchemeLink = true;
+        }
+      }
+    }
+
+    if (!isGovIn && !isOfficialSchemeLink) {
+      if (!reasons.some(r => r.code === 'SUSPICIOUS_LINK')) {
+        reasons.push({
+          code: 'SUSPICIOUS_LINK',
+          weight: 35,
+          en: `Non-government link detected (${domain}). Official Tamil Nadu Government portals strictly use .gov.in or .nic.in domains.`,
+          ta: `அரசு சாரா இணைப்பு கண்டறியப்பட்டது (${domain}). தமிழ்நாடு அரசின் அதிகாரப்பூர்வ இணையதளங்கள் .gov.in அல்லது .nic.in டொமைன்களில் மட்டுமே செயல்படும்.`
+        });
+      }
+    }
+  }
+
+  // 6. Pressure and bait tactics
+  const baitRegexEn = /\b(last\s+date\s+today|apply\s+immediately|hurry\s+up|limited\s+time|few\s+hours\s+left|last\s+chance|urgent)\b|\b(lottery|you\s+have\s+won|selected\s+(?:for\s+)?prize|free\s+recharge|lucky\s+draw)\b|\b(forward\s+to\s+\d+|share\s+(?:to|with|in)\s+\d+|send\s+to\s+\d+\s*(?:friends|groups|people))\b/i;
+  const baitRegexTa = /(இன்றே\s*கடைசி\s*நாள்|உடனே\s*விண்ணப்பிக்கவும்|விரைந்து\s*விண்ணப்பியுங்கள்|கடைசி\s*வாய்ப்பு|வென்றுள்ளீர்கள்|இலவச\s*ரீசார்ஜ்|\d+\s*(பேருக்கு|நபருக்கு|குழுக்களில்)\s*பகிருங்கள்)/i;
+
+  if (baitRegexEn.test(rawText) || baitRegexTa.test(rawText)) {
+    reasons.push({
+      code: 'PRESSURE_OR_BAIT',
+      weight: 25,
+      en: 'High-pressure tactics or bait detected (urgency countdowns, lottery/prize claims, or chain forwarding demands). Real government schemes never demand WhatsApp shares or artificial deadlines.',
+      ta: 'அவசரப்படுத்துதல் அல்லது ஆசை வார்த்தைகள் கண்டறியப்பட்டன (கடைசி நாள் பதற்றம், பரிசு வாக்குறுதிகள் அல்லது வாட்ஸ்அப் பகிர்வு நிபந்தனைகள்). அரசு நலத்திட்டங்கள் ஒருபோதும் செய்திகளை பகிருமாறு கோருவதில்லை.'
+    });
+  }
+
+  // Scoring & Verdict (never return "safe")
+  let totalScore = reasons.reduce((sum, r) => sum + r.weight, 0);
+  totalScore = Math.min(100, Math.max(0, totalScore));
+
+  const hasCritical = reasons.some(r => r.code === 'CREDENTIAL_REQUEST');
+  const hasPayment = reasons.some(r => r.code === 'PAYMENT_REQUEST');
+  const hasLinkFlag = reasons.some(r => r.code === 'SHORTENED_URL' || r.code === 'SUSPICIOUS_LINK');
+
+  let verdict = 'no_red_flags_found';
+  if (hasCritical || hasPayment || totalScore >= 50 || (hasLinkFlag && reasons.length >= 2)) {
+    verdict = 'likely_scam';
+  } else if (totalScore >= 20 || reasons.length > 0) {
+    verdict = 'potentially_suspicious';
+  } else {
+    verdict = 'no_red_flags_found';
+  }
+
+  // Advice array - always includes credentials warning and official link / 1930
+  const advice = [
+    "Do not share OTP, PIN, password, CVV, or banking credentials with anyone under any circumstances.",
+    "Real Tamil Nadu Government welfare schemes never charge any application, registration, or processing fees.",
+    matchedScheme && matchedScheme.official_link
+      ? `Verify all scheme details directly on the official state portal: ${matchedScheme.official_link} or visit your nearest e-Sevai centre.`
+      : "Verify state schemes exclusively on official portals ending in .gov.in or .nic.in.",
+    "To report cyber scams or financial fraud, immediately call the National Cyber Crime Helpline at 1930 or visit cybercrime.gov.in."
+  ];
+
+  return {
+    verdict,
+    score: totalScore,
+    reasons: reasons.map(r => ({
+      code: r.code,
+      en: r.en,
+      ta: r.ta
+    })),
+    matched_scheme: matchedScheme ? {
+      id: matchedScheme.id,
+      name: matchedScheme.name_en,
+      name_ta: matchedScheme.name_ta,
+      official_link: matchedScheme.official_link
+    } : null,
+    advice
+  };
+}
+
+// ----------------------------------------------------------------------------
+// SCAM CHECK HTTP ENDPOINTS (PUBLIC - NO AUTH REQUIRED)
+// ----------------------------------------------------------------------------
+app.get('/api/scam-check/config', (req, res) => {
+  res.json({
+    gemini_configured: Boolean(genAI),
+    max_chars: 5000
+  });
+});
+
+app.post('/api/scam-check', async (req, res) => {
+  try {
+    let { text = '', language = 'en', image = null } = req.body;
+
+    if (text && typeof text === 'string' && text.length > 5000) {
+      return res.status(400).json({ error: "Text exceeds the 5,000 characters limit." });
+    }
+
+    let extractedText = null;
+
+    // Optional Gemini Vision for screenshot OCR if image provided and genAI configured
+    if (image && genAI) {
+      try {
+        const base64Data = image.includes('base64,') ? image.split('base64,')[1] : image;
+        const mimeMatch = image.match(/^data:([^;]+);base64,/);
+        const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+        const visionModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const visionPrompt = "Extract all readable text from this screenshot or message, especially any text about government schemes, financial claims, fees, links, or instructions. Return ONLY the raw extracted text.";
+        const visionRes = await visionModel.generateContent([
+          visionPrompt,
+          { inlineData: { data: base64Data, mimeType } }
+        ]);
+        const extracted = visionRes.response.text();
+        if (extracted && extracted.trim()) {
+          extractedText = extracted.trim();
+          if (!text || text.trim() === '') {
+            text = extractedText;
+          }
+        }
+      } catch (visionErr) {
+        console.warn('[ScamCheck Vision OCR Error]', visionErr.message);
+      }
+    }
+
+    if (!text || typeof text !== 'string' || text.trim() === '') {
+      return res.status(400).json({ error: "Text or a valid screenshot image is required for scam check." });
+    }
+
+    const trimmedText = text.slice(0, 5000);
+
+    let schemes = [];
+    try {
+      schemes = loadVerifiedSchemes();
+    } catch (e) {
+      schemes = [];
+    }
+
+    const result = analyzeScamText(trimmedText, schemes);
+
+    // Optional Gemini step: plain-language explanation with PII redacted
+    let explanation = null;
+    if (genAI) {
+      try {
+        const redacted = redactPII(trimmedText);
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const prompt = `You are a Tamil Nadu Government Citizen Scam Detector assistant.
+The citizen provided this message:
+"""
+${redacted}
+"""
+Our automated detector evaluated this message with verdict: "${result.verdict}" (Risk Score: ${result.score}/100).
+Red flags detected:
+${result.reasons.length > 0 ? result.reasons.map(r => `- ${r.code}: ${r.en}`).join('\n') : 'No red flags detected'}
+Matched Official Scheme: ${result.matched_scheme ? result.matched_scheme.name : 'None'}
+
+Provide a concise, direct 2-sentence citizen-friendly explanation of why this message is ${result.verdict.replace(/_/g, ' ')} and what specific caution they should take.
+Respond in ${language === 'ta' ? 'Tamil' : 'English'}.
+Do NOT use markdown headers or disclaimers, only the 2-sentence explanation.`;
+
+        const geminiRes = await model.generateContent(prompt);
+        explanation = geminiRes.response.text().trim();
+      } catch (geminiErr) {
+        explanation = null;
+      }
+    }
+
+    res.json({
+      ...result,
+      explanation,
+      extracted_text: extractedText
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// STANDALONE FEATURES TEST SUITE (SCAM CHECK DETECTOR — RUNS WITHOUT DB)
+function runFeaturesTestSuite() {
+  const assert = require('assert');
+  console.log("==========================================================");
+  console.log("TAMIL NADU CITIZEN SERVICE ASSISTANT — SCAM CHECK TEST SUITE");
+  console.log("==========================================================\n");
+
+  const schemes = loadVerifiedSchemes();
+  assert(Array.isArray(schemes) && schemes.length > 0, "Verified schemes must be loaded from data/verified_schemes.json");
+
+  const testCases = [
+    {
+      id: 1,
+      name: "Fee scam pattern",
+      text: "Government scheme - Pay Rs 500 registration fee to receive Rs 50,000 under Kalaignar Magalir Urimai scheme.",
+      assertFn: (res) => {
+        assert.strictEqual(res.verdict, "likely_scam");
+        assert(res.reasons.some(r => r.code === 'PAYMENT_REQUEST'), "Must detect PAYMENT_REQUEST");
+        assert(res.score >= 40, "Score should reflect high risk");
+      }
+    },
+    {
+      id: 2,
+      name: "Aadhaar OTP / PIN Credential request scam",
+      text: "Your Pudhumai Penn monthly allowance is blocked. Please share your Aadhaar OTP and bank PIN to unblock immediately.",
+      assertFn: (res) => {
+        assert.strictEqual(res.verdict, "likely_scam");
+        assert(res.reasons.some(r => r.code === 'CREDENTIAL_REQUEST'), "Must detect CREDENTIAL_REQUEST");
+      }
+    },
+    {
+      id: 3,
+      name: "Fake link / Shortener scam",
+      text: "Click http://bit.ly/tn-free-money to register for Tamil Nadu government welfare scholarship.",
+      assertFn: (res) => {
+        assert.strictEqual(res.verdict, "likely_scam");
+        assert(res.reasons.some(r => r.code === 'SHORTENED_URL'), "Must detect SHORTENED_URL");
+      }
+    },
+    {
+      id: 4,
+      name: "Correct official scheme text",
+      text: "Kalaignar Magalir Urimai Thogai Scheme (KMUT) provides monthly financial assistance of ₹1,000 directly credited to bank accounts of women heads of eligible households. Apply free of charge at your designated e-Sevai centre or visit https://kmut.tn.gov.in",
+      assertFn: (res) => {
+        assert.strictEqual(res.verdict, "no_red_flags_found");
+        assert.notStrictEqual(res.verdict, "safe", "Never return the word 'safe'");
+        assert(res.matched_scheme !== null, "Must match KMUT scheme");
+        assert.strictEqual(res.matched_scheme.id, 1, "Matched scheme ID must be 1");
+        assert.strictEqual(res.reasons.length, 0, "No red flags should be flagged");
+      }
+    },
+    {
+      id: 5,
+      name: "Tamil message fee scam",
+      text: "கலைஞர் மகளிர் உரிமைத் தொகை பெற உடனே ரூ 500 பதிவுக் கட்டணம் செலுத்துங்கள். GPay மூலம் பணம் அனுப்பவும்.",
+      assertFn: (res) => {
+        assert.strictEqual(res.verdict, "likely_scam");
+        assert(res.reasons.some(r => r.code === 'PAYMENT_REQUEST'), "Must detect Tamil payment request");
+      }
+    },
+    {
+      id: 6,
+      name: "Unknown / fabricated scheme",
+      text: "Special TN Golden Welfare Scheme 2026: Get free cash voucher for every resident. Register today.",
+      assertFn: (res) => {
+        assert(res.verdict === "potentially_suspicious" || res.verdict === "likely_scam");
+        assert.strictEqual(res.matched_scheme, null, "Unknown scheme must have null matched_scheme");
+        assert(res.reasons.some(r => r.code === 'SCHEME_NOT_FOUND'), "Must flag SCHEME_NOT_FOUND");
+      }
+    },
+    {
+      id: 7,
+      name: "Amount mismatch for verified scheme",
+      text: "Kalaignar Magalir Urimai Thogai Scheme will disburse ₹25,000 to all women in Salem district without any documents.",
+      assertFn: (res) => {
+        assert(res.matched_scheme !== null, "Must match KMUT");
+        assert(res.reasons.some(r => r.code === 'BENEFIT_AMOUNT_MISMATCH'), "Must flag BENEFIT_AMOUNT_MISMATCH");
+      }
+    },
+    {
+      id: 8,
+      name: "Screen-sharing app scam (AnyDesk / TeamViewer)",
+      text: "Install AnyDesk on your mobile phone and grant screen access to receive your TN welfare funds.",
+      assertFn: (res) => {
+        assert.strictEqual(res.verdict, "likely_scam");
+        assert(res.reasons.some(r => r.code === 'CREDENTIAL_REQUEST'), "Must detect remote access app");
+      }
+    },
+    {
+      id: 9,
+      name: "Urgency and forwarding chain bait",
+      text: "You have won a free laptop lottery under Tamil Nadu government! Last date today, forward to 10 WhatsApp groups now.",
+      assertFn: (res) => {
+        assert(res.reasons.some(r => r.code === 'PRESSURE_OR_BAIT'), "Must detect PRESSURE_OR_BAIT");
+      }
+    },
+    {
+      id: 10,
+      name: "Composite high-risk fraud (fee + credentials + fake link)",
+      text: "Emergency: Pay Rs 1000 processing fee and send Aadhaar OTP to bit.ly/tn-govt-bonus to get Rs 1,00,000! Share to 10 friends.",
+      assertFn: (res) => {
+        assert.strictEqual(res.verdict, "likely_scam");
+        assert(res.score >= 70, "Composite score must be >= 70");
+        assert(res.reasons.some(r => r.code === 'PAYMENT_REQUEST'), "Must have PAYMENT_REQUEST");
+        assert(res.reasons.some(r => r.code === 'CREDENTIAL_REQUEST'), "Must have CREDENTIAL_REQUEST");
+        assert(res.reasons.some(r => r.code === 'SHORTENED_URL'), "Must have SHORTENED_URL");
+      }
+    },
+    {
+      id: 11,
+      name: "Tamil legitimate scheme text",
+      text: "முதலமைச்சரின் விரிவான மருத்துவக் காப்பீட்டுத் திட்டம் மூலம் குடும்பத்திற்கு ஆண்டுக்கு ₹5,00,000 வரை கட்டணமில்லா சிகிச்சை பெறலாம். விவரங்களுக்கு https://cmchistn.com பார்க்கவும்.",
+      assertFn: (res) => {
+        assert.strictEqual(res.verdict, "no_red_flags_found");
+        assert.notStrictEqual(res.verdict, "safe");
+        assert(res.matched_scheme !== null, "Must match CMCHIS scheme");
+        assert.strictEqual(res.reasons.length, 0, "No flags for legitimate scheme");
+      }
+    }
+  ];
+
+  let passed = 0;
+  for (const tc of testCases) {
+    try {
+      const res = analyzeScamText(tc.text, schemes);
+      tc.assertFn(res);
+      console.log(`[PASS] Case ${tc.id}: ${tc.name} -> Verdict: "${res.verdict}" (Score: ${res.score}/100)`);
+      passed++;
+    } catch (err) {
+      console.error(`[FAIL] Case ${tc.id}: ${tc.name} -> ${err.message}`);
+      process.exit(1);
+    }
+  }
+
+  console.log("\n==========================================================");
+  console.log(`SCAM CHECK TEST RESULT: ${passed}/${testCases.length} assertions passed! Status: VERIFIED PASSED ✅`);
+  console.log("==========================================================");
+  process.exit(0);
+}
+
 // STANDALONE TEST SUITE RUNNER FUNCTION
 async function runAgentTestSuite() {
   console.log("==========================================================");
@@ -1762,7 +2344,9 @@ async function runAgentTestSuite() {
 
 // SERVER OR TEST ENTRY
 if (require.main === module) {
-  if (process.argv.includes('--test')) {
+  if (process.argv.includes('--test-features')) {
+    runFeaturesTestSuite();
+  } else if (process.argv.includes('--test')) {
     runAgentTestSuite();
   } else {
     initDb().then(() => {
@@ -1776,4 +2360,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { app, pool, initDb, runOrchestrator };
+module.exports = { app, pool, initDb, runOrchestrator, analyzeScamText };
