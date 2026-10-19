@@ -4,7 +4,7 @@ import {
   Send, Mic, MicOff, ChevronDown, ChevronUp, Cpu, Wrench, Search,
   CheckCircle2, FileText, Activity, Volume2, X, Filter, ExternalLink,
   Award, Building2, AlertTriangle, ShieldCheck, RefreshCw, Database, Sparkles, Check, AlertCircle, Info, Loader2,
-  MapPin, Compass, UserCheck, ArrowRight
+  MapPin, Compass, UserCheck, ArrowRight, ShieldAlert, Upload, Image as ImageIcon, PhoneCall
 } from 'lucide-react';
 import NearbyOfficesModal from './components/NearbyOfficesModal';
 import FindSchemesForMe from './components/FindSchemesForMe';
@@ -54,7 +54,36 @@ const translations = {
     eval_passed: "You ARE ELIGIBLE for this scheme!",
     eval_failed: "You do not meet all criteria.",
     eval_note_failed: "Note: You do not meet all criteria, but you may still submit an application if you hold special exemptions.",
-    eval_note_passed: "Recommended: Your profile matches the required eligibility criteria."
+    eval_note_passed: "Recommended: Your profile matches the required eligibility criteria.",
+    scam_tab: "Scam Check",
+    scam_title: "Tamil Nadu Scheme Scam & Fraud Detector",
+    scam_subtitle: "Paste any WhatsApp forward, SMS, or website text to verify its authenticity against verified state government schemes.",
+    scam_paste_label: "Message Text or SMS",
+    scam_placeholder: "Paste WhatsApp message, SMS, or website text here (e.g., 'Government scheme - Pay Rs 500 registration fee to receive Rs 50,000')...",
+    scam_verify_btn: "Verify Scheme",
+    scam_analyzing: "Analyzing message against verified schemes...",
+    scam_clear: "Clear",
+    scam_samples_label: "Try test messages:",
+    scam_sample_fee: "Fee Scam (Rs 500)",
+    scam_sample_otp: "Aadhaar OTP Fraud",
+    scam_sample_link: "Suspicious Short Link",
+    scam_sample_kmut: "Official KMUT Text",
+    scam_upload_label: "Upload Screenshot (AI OCR)",
+    scam_remove_img: "Remove Image",
+    scam_img_ready: "Screenshot attached for AI analysis",
+    scam_ocr_extracted: "Text extracted from screenshot:",
+    scam_verdict_likely_scam: "Likely Scam / Fraud Detected",
+    scam_verdict_suspicious: "Potentially Suspicious",
+    scam_verdict_no_red_flags: "No Red Flags Found",
+    scam_risk_score: "Scam Risk Score",
+    scam_matched_scheme: "Matched Official Scheme",
+    scam_no_matched_scheme: "Scheme not found in verified database",
+    scam_reasons_title: "Detected Red Flags & Reasons",
+    scam_explanation_title: "AI Plain-Language Advisory",
+    scam_advice_title: "Safety Advice",
+    scam_disclaimer: "This is an automated check, not a legal ruling. When in doubt, confirm on the official website or call 1930.",
+    scam_call_1930: "Call 1930 Cyber Helpline",
+    scam_visit_portal: "Visit Official Portal"
   },
   ta: {
     app_title: "தமிழ்நாடு குடிமக்கள் உதவி",
@@ -95,7 +124,36 @@ const translations = {
     eval_passed: "நீங்கள் இந்தத் திட்டத்திற்கு தகுதியுடையவர்!",
     eval_failed: "நீங்கள் அனைத்து தகுதி வரம்புகளையும் பூர்த்தி செய்யவில்லை.",
     eval_note_failed: "குறிப்பு: நீங்கள் அனைத்து வரம்புகளையும் பூர்த்தி செய்யவில்லை, எனினும் சிறப்பு விலக்குகள் இருந்தால் விண்ணப்பிக்கலாம்.",
-    eval_note_passed: "பரிந்துரை: உங்கள் விவரக்குறிப்பு தேவையான அனைத்து தகுதிகளுடன் பொருந்துகிறது."
+    eval_note_passed: "பரிந்துரை: உங்கள் விவரக்குறிப்பு தேவையான அனைத்து தகுதிகளுடன் பொருந்துகிறது.",
+    scam_tab: "மோசடி சரிபார்ப்பு",
+    scam_title: "தமிழ்நாடு அரசு திட்ட மோசடி சரிபார்ப்பு மையம்",
+    scam_subtitle: "வாட்ஸ்அப் செய்தி, SMS அல்லது இணையதள தகவலை அதிகாரப்பூர்வ அரசுத் திட்டங்களுடன் ஒப்பிட்டு உண்மைத்தன்மையை சரிபார்க்கவும்.",
+    scam_paste_label: "செய்தி அல்லது குறுஞ்செய்தியை ஒட்டவும்",
+    scam_placeholder: "வாட்ஸ்அப் செய்தி, SMS அல்லது இணையதள உரையை இங்கே ஒட்டவும் (எ.கா: 'அரசு திட்டம் - ரூ 50,000 பெற ரூ 500 பதிவுக் கட்டணம் செலுத்தவும்')...",
+    scam_verify_btn: "திட்டத்தை சரிபார்க்கவும்",
+    scam_analyzing: "செய்தி ஆய்வு செய்யப்படுகிறது...",
+    scam_clear: "அழிக்க",
+    scam_samples_label: "மாதிரி செய்திகளை சோதிக்க:",
+    scam_sample_fee: "கட்டண மோசடி (ரூ 500)",
+    scam_sample_otp: "ஆதார் OTP மோசடி",
+    scam_sample_link: "போலி இணைய முகவரி",
+    scam_sample_kmut: "அதிகாரப்பூர்வ KMUT செய்தி",
+    scam_upload_label: "திரைப்படத்தை பதிவேற்றவும் (AI OCR)",
+    scam_remove_img: "படத்தை நீக்கு",
+    scam_img_ready: "படம் ஆய்வுக்கு இணைக்கப்பட்டுள்ளது",
+    scam_ocr_extracted: "படத்திலிருந்து எடுக்கப்பட்ட உரை:",
+    scam_verdict_likely_scam: "மோசடி என கண்டறியப்பட்டுள்ளது",
+    scam_verdict_suspicious: "சந்தேகத்திற்குரியது",
+    scam_verdict_no_red_flags: "சிவப்புக் கொடிகள் எதுவும் கண்டறியப்படவில்லை",
+    scam_risk_score: "மோசடி இடர் அளவு",
+    scam_matched_scheme: "பொருந்திய அதிகாரப்பூர்வ திட்டம்",
+    scam_no_matched_scheme: "சரிபார்க்கப்பட்ட தரவுத்தளத்தில் திட்டம் எதுவும் பொருந்தவில்லை",
+    scam_reasons_title: "கண்டறியப்பட்ட சிவப்புக் கொடிகள் & காரணங்கள்",
+    scam_explanation_title: "AI எளிய விளக்கம் & ஆலோசனை",
+    scam_advice_title: "பாதுகாப்பு வழிகாட்டுதல்",
+    scam_disclaimer: "இது தானியங்கி சரிபார்ப்பு மட்டுமே, சட்டப்பூர்வ தீர்ப்பு அல்ல. சந்தேகம் இருந்தால் அதிகாரப்பூர்வ வலைத்தளத்தில் உறுதிப்படுத்தவும் அல்லது 1930 என்ற எண்ணை அழைக்கவும்.",
+    scam_call_1930: "1930 உதவி எண்ணை அழைக்கவும்",
+    scam_visit_portal: "அதிகாரப்பூர்வ தளம் செல்லவும்"
   }
 };
 
@@ -213,6 +271,9 @@ export default function App() {
             <button onClick={() => setActiveTab('schemes')} className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-sm font-medium ${activeTab === 'schemes' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'}`}>
               <BookOpen size={16} /><span>{t('schemes_tab')}</span>
             </button>
+            <button onClick={() => setActiveTab('scam_check')} className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-sm font-medium transition ${activeTab === 'scam_check' ? 'bg-amber-600 text-white shadow-lg shadow-amber-950/40' : 'text-slate-400 hover:text-white'}`}>
+              <ShieldAlert size={16} className={activeTab === 'scam_check' ? 'text-white' : 'text-amber-400'} /><span>{t('scam_tab')}</span>
+            </button>
             <button onClick={() => setActiveTab('tracker')} className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-sm font-medium ${activeTab === 'tracker' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'}`}>
               <Clock size={16} /><span>{t('tracker_tab')}</span>
             </button>
@@ -256,7 +317,7 @@ export default function App() {
       </header>
 
       {/* Main Content Body */}
-      <main className="flex-1 pb-10">
+      <main className="flex-1 pb-24 md:pb-10">
         {activeTab === 'chat' && (
           <ChatComponent
             t={t}
@@ -285,6 +346,13 @@ export default function App() {
             onOpenOfficeFinder={handleOpenOffices}
           />
         )}
+        {activeTab === 'scam_check' && (
+          <ScamCheckComponent
+            t={t}
+            lang={lang}
+            apiUrl={API_URL}
+          />
+        )}
         {activeTab === 'tracker' && (
           <TrackerComponent
             t={t}
@@ -296,6 +364,52 @@ export default function App() {
         )}
         {activeTab === 'admin' && user && user.role === 'admin' && <AdminComponent t={t} lang={lang} />}
       </main>
+
+      {/* Mobile Tab Row (Visible on small screens) */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 backdrop-blur-xl border-t border-slate-800 px-2 py-1.5 flex items-center justify-around shadow-2xl">
+        <button
+          onClick={() => setActiveTab('chat')}
+          className={`flex flex-col items-center py-1 px-1.5 rounded-lg text-[10px] font-medium transition ${activeTab === 'chat' ? 'text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
+        >
+          <MessageSquare size={17} />
+          <span className="truncate max-w-[48px]">{t('chat_tab')}</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('find_schemes')}
+          className={`flex flex-col items-center py-1 px-1.5 rounded-lg text-[10px] font-medium transition ${activeTab === 'find_schemes' ? 'text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
+        >
+          <Sparkles size={17} />
+          <span className="truncate max-w-[52px]">{t('find_schemes_tab')}</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('schemes')}
+          className={`flex flex-col items-center py-1 px-1.5 rounded-lg text-[10px] font-medium transition ${activeTab === 'schemes' ? 'text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
+        >
+          <BookOpen size={17} />
+          <span className="truncate max-w-[48px]">{t('schemes_tab')}</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('scam_check')}
+          className={`flex flex-col items-center py-1 px-1.5 rounded-lg text-[10px] font-medium transition ${activeTab === 'scam_check' ? 'text-amber-400 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
+        >
+          <ShieldAlert size={17} className={activeTab === 'scam_check' ? 'text-amber-400' : 'text-amber-500/70'} />
+          <span className="truncate max-w-[52px]">{t('scam_tab')}</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('tracker')}
+          className={`flex flex-col items-center py-1 px-1.5 rounded-lg text-[10px] font-medium transition ${activeTab === 'tracker' ? 'text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
+        >
+          <Clock size={17} />
+          <span className="truncate max-w-[48px]">{t('tracker_tab')}</span>
+        </button>
+        <button
+          onClick={() => handleOpenOffices('all')}
+          className="flex flex-col items-center py-1 px-1.5 rounded-lg text-[10px] font-medium text-emerald-400 hover:text-emerald-300"
+        >
+          <MapPin size={17} />
+          <span className="truncate max-w-[48px]">{t('nearby_offices_tab')}</span>
+        </button>
+      </nav>
 
       <footer className="border-t border-slate-900 bg-slate-950 py-4 text-center text-xs text-slate-500">
         Tamil Nadu Autonomous Citizen Service Assistant • Powered by Agentic AI & RAG Core
@@ -1933,3 +2047,455 @@ function DemoAppModal({ isOpen, onClose, scheme, lang, t, onSubmitted }) {
     </div>
   );
 }
+
+// ============================================================================
+// SCAM CHECK COMPONENT (TAMIL NADU WELFARE SCHEME FRAUD DETECTOR)
+// ============================================================================
+function ScamCheckComponent({ t, lang, apiUrl }) {
+  const [inputText, setInputText] = useState('');
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [imageName, setImageName] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [result, setResult] = useState(null);
+  const [visionConfig, setVisionConfig] = useState({ gemini_configured: false, max_chars: 5000 });
+  const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    fetch(`${apiUrl}/api/scam-check/config`)
+      .then(r => r.json())
+      .then(data => {
+        if (data && typeof data === 'object') {
+          setVisionConfig(data);
+        }
+      })
+      .catch(() => {});
+  }, [apiUrl]);
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setError(lang === 'ta' ? 'தயவுசெய்து சரியான படக் கோப்பைத் தேர்ந்தெடுக்கவும்.' : 'Please select a valid image file.');
+      return;
+    }
+    setImageName(file.name);
+    const reader = new FileReader();
+    reader.onload = () => {
+      setSelectedImage(reader.result);
+      setError(null);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleClearImage = () => {
+    setSelectedImage(null);
+    setImageName('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleVerify = async () => {
+    if (!inputText.trim() && !selectedImage) return;
+    setLoading(true);
+    setError(null);
+    setResult(null);
+
+    try {
+      const response = await fetch(`${apiUrl}/api/scam-check`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: inputText.slice(0, 5000),
+          image: selectedImage,
+          language: lang
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Verification failed');
+      }
+      setResult(data);
+      if (data.extracted_text && !inputText.trim()) {
+        setInputText(data.extracted_text);
+      }
+    } catch (err) {
+      setError(err.message || 'An error occurred during verification.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const sampleMessages = [
+    {
+      label: t('scam_sample_fee'),
+      text: lang === 'ta'
+        ? "தமிழ்நாடு அரசு திட்டம்: ரூ 500 முன்பணம் பதிவுக் கட்டணம் செலுத்தி உடனடியாக ரூ 50,000 உரிமைத் தொகை பெறுங்கள். GPay மூலம் பணம் அனுப்பவும்."
+        : "Government scheme - Pay Rs 500 registration fee to receive Rs 50,000 under Kalaignar Magalir Urimai scheme."
+    },
+    {
+      label: t('scam_sample_otp'),
+      text: lang === 'ta'
+        ? "உங்கள் புதுமைப் பெண் மாத உதவித்தொகை நிறுத்தி வைக்கப்பட்டுள்ளது. உடனே தொடர உங்கள் ஆதார் OTP மற்றும் வங்கி PIN எண்ணை பகிரவும்."
+        : "Your Pudhumai Penn monthly allowance is blocked. Please share your Aadhaar OTP and bank PIN to unblock immediately."
+    },
+    {
+      label: t('scam_sample_link'),
+      text: lang === 'ta'
+        ? "தமிழ்நாடு அரசின் இலவச கல்வி உதவித்தொகை பெற http://bit.ly/tn-free-money என்ற இணைப்பை கிளிக் செய்து பதிவு செய்யவும்."
+        : "Click http://bit.ly/tn-free-money to register for Tamil Nadu government welfare scholarship."
+    },
+    {
+      label: t('scam_sample_kmut'),
+      text: lang === 'ta'
+        ? "கலைஞர் மகளிர் உரிமைத் திட்டத்தில் தகுதியுள்ள குடும்பத் தலைவிகளுக்கு மாதம் ₹1,000 உரிமைத் தொகை நேரடியாக வங்கிக் கணக்கில் செலுத்தப்படும். கூடுதல் விவரங்களுக்கு https://kmut.tn.gov.in பார்க்கவும்."
+        : "Kalaignar Magalir Urimai Thogai Scheme (KMUT) provides monthly financial assistance of ₹1,000 directly credited to bank accounts of women heads of eligible households. Apply free of charge at your designated e-Sevai centre or visit https://kmut.tn.gov.in"
+    }
+  ];
+
+  return (
+    <div className="max-w-4xl mx-auto p-4 sm:p-6 space-y-6">
+      {/* Header Banner */}
+      <div className="glass-panel p-6 rounded-2xl border border-slate-800 relative overflow-hidden">
+        <div className="absolute -top-12 -right-12 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1.5">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-950/80 border border-amber-600/40 text-amber-300 text-xs font-semibold">
+              <ShieldAlert size={14} className="text-amber-400" />
+              <span>{lang === 'ta' ? 'தன்னாட்சி மோசடி தடுப்புக் காவல்' : 'Autonomous Scam Protection'}</span>
+            </div>
+            <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">{t('scam_title')}</h2>
+            <p className="text-xs sm:text-sm text-slate-400 max-w-2xl">{t('scam_subtitle')}</p>
+          </div>
+          <div className="shrink-0 flex items-center gap-2">
+            <a
+              href="tel:1930"
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-rose-950/60 hover:bg-rose-900/80 border border-rose-700/60 text-rose-200 text-xs font-semibold transition shadow-lg"
+            >
+              <PhoneCall size={14} className="text-rose-400 animate-pulse" />
+              <span>{lang === 'ta' ? 'சைபர் உதவி: 1930' : 'Cyber Helpline: 1930'}</span>
+            </a>
+          </div>
+        </div>
+
+        {/* Quick Sample Presets */}
+        <div className="mt-5 pt-4 border-t border-slate-800/80">
+          <div className="text-[11px] font-semibold text-slate-400 mb-2 flex items-center gap-1.5">
+            <Sparkles size={13} className="text-amber-400" />
+            <span>{t('scam_samples_label')}</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {sampleMessages.map((sample, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => {
+                  setInputText(sample.text);
+                  setSelectedImage(null);
+                  setImageName('');
+                  setResult(null);
+                  setError(null);
+                }}
+                className="px-2.5 py-1 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/70 text-xs transition"
+              >
+                {sample.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Input Form Panel */}
+      <div className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-4">
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+            <FileText size={14} className="text-emerald-400" />
+            <span>{t('scam_paste_label')}</span>
+          </label>
+          <div className="flex items-center gap-3">
+            {inputText && (
+              <button
+                type="button"
+                onClick={() => { setInputText(''); setResult(null); setError(null); }}
+                className="text-[11px] text-slate-400 hover:text-rose-400 transition"
+              >
+                {t('scam_clear')}
+              </button>
+            )}
+            <span className={`text-[11px] font-mono ${inputText.length > 4800 ? 'text-amber-400 font-bold' : 'text-slate-500'}`}>
+              {inputText.length.toLocaleString()} / 5,000
+            </span>
+          </div>
+        </div>
+
+        <textarea
+          rows={5}
+          maxLength={5000}
+          value={inputText}
+          onChange={(e) => setInputText(e.target.value)}
+          placeholder={t('scam_placeholder')}
+          className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl p-3.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/50 resize-y"
+        />
+
+        {/* Optional Gemini Vision Screenshot Upload (Hidden if GEMINI_API_KEY is not configured) */}
+        {visionConfig?.gemini_configured && (
+          <div className="pt-2 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                className="hidden"
+                id="scam-screenshot-input"
+              />
+              <label
+                htmlFor="scam-screenshot-input"
+                className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white text-xs font-medium transition"
+              >
+                <Upload size={14} className="text-amber-400" />
+                <span>{t('scam_upload_label')}</span>
+              </label>
+              {selectedImage && (
+                <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-xs text-emerald-400">
+                  <ImageIcon size={13} />
+                  <span className="truncate max-w-[160px]">{imageName || t('scam_img_ready')}</span>
+                  <button
+                    type="button"
+                    onClick={handleClearImage}
+                    className="p-0.5 text-slate-400 hover:text-rose-400 transition"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              )}
+            </div>
+            <span className="text-[11px] text-slate-500 italic">
+              {lang === 'ta' ? 'வாட்ஸ்அப் ஸ்கிரீன்ஷாட்டை நேரடியாக பதிவேற்றலாம்' : 'Upload WhatsApp or SMS screenshots directly for OCR'}
+            </span>
+          </div>
+        )}
+
+        {/* Error notification */}
+        {error && (
+          <div className="p-3 rounded-xl bg-rose-950/80 border border-rose-800/80 text-rose-200 text-xs flex items-center gap-2">
+            <AlertCircle size={15} className="text-rose-400 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {/* Action Button */}
+        <div className="pt-2 flex justify-end">
+          <button
+            type="button"
+            onClick={handleVerify}
+            disabled={loading || (!inputText.trim() && !selectedImage)}
+            className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs sm:text-sm transition-all shadow-lg shadow-amber-950/60 flex items-center justify-center gap-2"
+          >
+            {loading ? (
+              <>
+                <Loader2 size={16} className="animate-spin text-white" />
+                <span>{t('scam_analyzing')}</span>
+              </>
+            ) : (
+              <>
+                <ShieldCheck size={16} />
+                <span>{t('scam_verify_btn')}</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Verification Result Card */}
+      {result && (
+        <div
+          className={`glass-card p-6 rounded-2xl border transition-all duration-300 space-y-5 ${
+            result.verdict === 'likely_scam'
+              ? 'bg-rose-950/25 border-rose-500/60 shadow-2xl shadow-rose-950/50'
+              : result.verdict === 'potentially_suspicious'
+              ? 'bg-amber-950/25 border-amber-500/60 shadow-2xl shadow-amber-950/50'
+              : 'bg-emerald-950/25 border-emerald-500/60 shadow-2xl shadow-emerald-950/50'
+          }`}
+        >
+          {/* Verdict Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+            <div className="flex items-center gap-3">
+              <div
+                className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
+                  result.verdict === 'likely_scam'
+                    ? 'bg-rose-600 text-white shadow-lg shadow-rose-900/60'
+                    : result.verdict === 'potentially_suspicious'
+                    ? 'bg-amber-600 text-white shadow-lg shadow-amber-900/60'
+                    : 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/60'
+                }`}
+              >
+                {result.verdict === 'likely_scam' && <AlertTriangle size={24} />}
+                {result.verdict === 'potentially_suspicious' && <AlertCircle size={24} />}
+                {result.verdict === 'no_red_flags_found' && <ShieldCheck size={24} />}
+              </div>
+              <div>
+                <div className="text-[11px] uppercase tracking-wider font-semibold text-slate-400">
+                  {lang === 'ta' ? 'ஆய்வு முடிவு' : 'Automated Verification Verdict'}
+                </div>
+                <h3 className="text-lg sm:text-xl font-bold text-white">
+                  {result.verdict === 'likely_scam'
+                    ? t('scam_verdict_likely_scam')
+                    : result.verdict === 'potentially_suspicious'
+                    ? t('scam_verdict_suspicious')
+                    : t('scam_verdict_no_red_flags')}
+                </h3>
+              </div>
+            </div>
+
+            {/* Risk Score Meter */}
+            <div className="sm:text-right bg-slate-900/80 p-3 rounded-xl border border-slate-800/80 min-w-[150px]">
+              <div className="text-[11px] text-slate-400 font-medium">{t('scam_risk_score')}</div>
+              <div className="text-xl font-mono font-bold text-white flex items-baseline sm:justify-end gap-1">
+                <span>{result.score}</span>
+                <span className="text-xs text-slate-500">/ 100</span>
+              </div>
+              <div className="w-full bg-slate-800 rounded-full h-1.5 mt-1.5 overflow-hidden">
+                <div
+                  className={`h-full transition-all duration-500 ${
+                    result.score >= 50
+                      ? 'bg-rose-500'
+                      : result.score >= 20
+                      ? 'bg-amber-500'
+                      : 'bg-emerald-500'
+                  }`}
+                  style={{ width: `${Math.max(5, result.score)}%` }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Extracted Text (if vision OCR ran) */}
+          {result.extracted_text && (
+            <div className="p-3 bg-slate-900/80 border border-slate-800 rounded-xl space-y-1 text-xs">
+              <div className="text-amber-400 font-semibold flex items-center gap-1.5">
+                <ImageIcon size={13} />
+                <span>{t('scam_ocr_extracted')}</span>
+              </div>
+              <p className="text-slate-300 font-mono text-[11px] whitespace-pre-wrap">{result.extracted_text}</p>
+            </div>
+          )}
+
+          {/* Matched Official Scheme Section */}
+          <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2">
+            <div className="text-[11px] font-semibold text-slate-400 flex items-center gap-1.5">
+              <BookOpen size={14} className="text-emerald-400" />
+              <span>{t('scam_matched_scheme')}</span>
+            </div>
+            {result.matched_scheme ? (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+                <div>
+                  <div className="text-sm font-bold text-white">
+                    {lang === 'ta' && result.matched_scheme.name_ta
+                      ? result.matched_scheme.name_ta
+                      : result.matched_scheme.name}
+                  </div>
+                  <div className="text-xs text-slate-400 mt-0.5 font-mono">
+                    Official ID: TN-SCHEME-{result.matched_scheme.id}
+                  </div>
+                </div>
+                {result.matched_scheme.official_link && (
+                  <a
+                    href={result.matched_scheme.official_link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-700/60 text-emerald-300 text-xs font-semibold transition"
+                  >
+                    <span>{t('scam_visit_portal')}</span>
+                    <ExternalLink size={13} />
+                  </a>
+                )}
+              </div>
+            ) : (
+              <div className="text-xs text-amber-300/90 flex items-center gap-2 pt-1">
+                <AlertCircle size={14} className="text-amber-400 shrink-0" />
+                <span>{t('scam_no_matched_scheme')}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Detected Red Flags & Reasons List */}
+          {result.reasons && result.reasons.length > 0 && (
+            <div className="space-y-2.5">
+              <div className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                <AlertTriangle size={14} className="text-rose-400" />
+                <span>{t('scam_reasons_title')} ({result.reasons.length})</span>
+              </div>
+              <div className="space-y-2">
+                {result.reasons.map((r, i) => (
+                  <div
+                    key={i}
+                    className="p-3 rounded-xl bg-slate-900/90 border border-rose-900/40 text-xs space-y-1"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded-md bg-rose-950 border border-rose-700/60 text-rose-300 font-mono text-[10px] font-bold">
+                        {r.code}
+                      </span>
+                    </div>
+                    <p className="text-slate-200 leading-relaxed text-xs">
+                      {lang === 'ta' && r.ta ? r.ta : r.en}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* AI Plain-Language Citizen Advisory */}
+          {result.explanation && (
+            <div className="p-4 rounded-xl bg-gradient-to-br from-indigo-950/30 to-purple-950/30 border border-indigo-700/40 space-y-1.5">
+              <div className="text-xs font-semibold text-indigo-300 flex items-center gap-1.5">
+                <Sparkles size={14} className="text-indigo-400" />
+                <span>{t('scam_explanation_title')}</span>
+              </div>
+              <p className="text-xs text-indigo-100/90 leading-relaxed">
+                {result.explanation}
+              </p>
+            </div>
+          )}
+
+          {/* Citizen Safety Advice Checklist */}
+          {result.advice && result.advice.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                <ShieldCheck size={14} className="text-emerald-400" />
+                <span>{t('scam_advice_title')}</span>
+              </div>
+              <ul className="space-y-1.5">
+                {result.advice.map((item, idx) => (
+                  <li
+                    key={idx}
+                    className="flex items-start gap-2 text-xs text-slate-300 bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/80"
+                  >
+                    <CheckCircle2 size={14} className="text-emerald-400 shrink-0 mt-0.5" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Mandatory Disclaimer & Helpline Banner */}
+          <div className="pt-3 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="text-slate-400 italic flex items-center gap-1.5">
+              <Info size={14} className="text-amber-400 shrink-0" />
+              <span>{t('scam_disclaimer')}</span>
+            </div>
+            <a
+              href="tel:1930"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-950/80 hover:bg-rose-900 border border-rose-700 text-rose-300 font-semibold text-xs transition shrink-0"
+            >
+              <PhoneCall size={12} className="text-rose-400" />
+              <span>{t('scam_call_1930')}</span>
+            </a>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
